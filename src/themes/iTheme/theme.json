@@ -9,16 +9,6 @@
   "stylesheet": "style.css",
   "screenshot": "screenshot.png",
   "config": {
-    "t": {
-      "type": "text",
-      "label": "标题",
-      "default": "iTheme"
-    },
-    "s": {
-      "type": "text",
-      "label": "副标题",
-      "default": "文字"
-    },
     "dh": {
       "type": "textarea",
       "label": "导航",

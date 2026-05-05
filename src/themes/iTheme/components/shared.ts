@@ -35,16 +35,21 @@ export function buildArchiveTitle(text: string | undefined): string {
 }
 
 export function getHeaderTitle(props: ThemeBaseProps): string {
-  return getThemeText(props.themeConfig, 't', props.options.title || 'iTheme');
+  return props.options.title || 'iTheme';
 }
 
 export function getHeaderSubtitle(props: ThemeBaseProps): string {
-  return getThemeText(props.themeConfig, 's', props.options.description || '');
+  return props.options.description || '';
 }
 
 export function getNavHtml(props: ThemeBaseProps): string {
   const fallback = `<ul class="menu"><li><a href="${props.urls.siteUrl || '/'}">主页<strong>HOME</strong></a></li><li><a id="s">搜索<strong>SEARCH</strong></a></li></ul>`;
-  return getThemeText(props.themeConfig, 'dh', fallback);
+  const navHtml = getThemeText(props.themeConfig, 'dh', fallback);
+  const toggleItem = `<li><a id="theme-toggle" class="theme-toggle-link" href="javascript:void(0)">夜间<strong>NIGHT</strong></a></li>`;
+  if (navHtml.includes('</ul>')) {
+    return navHtml.replace('</ul>', `${toggleItem}</ul>`);
+  }
+  return `${navHtml}${toggleItem}`;
 }
 
 export interface ThemeCategoryNode {
@@ -196,5 +201,5 @@ export function getPageTitleSuffix(props: { archiveTitle?: string; options: Them
 }
 
 export function formatCommentDate(timestamp: number, timezone: number): string {
-  return formatDate(timestamp, 'M d,Y', timezone);
+  return formatDate(timestamp, 'Y-m-d', timezone);
 }

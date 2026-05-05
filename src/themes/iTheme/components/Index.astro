@@ -17,7 +17,7 @@ const latestTime = props.posts.length > 0 ? props.posts[props.posts.length - 1].
           <td>
             <h2><a href={post.permalink}>{post.title}</a></h2>
             <div>{post.categories.map((category) => <a href={category.permalink}>{category.name}</a>)}</div>
-            <p>{formatDate(post.created, 'M d,Y', props.options.timezone)}</p>
+            <p>{formatDate(post.created, 'M d Y', props.options.timezone).toUpperCase()}</p>
           </td>
         </tr>
       ))}

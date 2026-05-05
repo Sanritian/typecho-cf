@@ -13,6 +13,8 @@ describe('iTheme files', () => {
     expect(source).toContain('"config"');
     expect(source).toContain('"dh"');
     expect(source).toContain('"fl"');
+    expect(source).not.toContain('"t"');
+    expect(source).not.toContain('"s"');
   });
 
   it('ships a dedicated client script', () => {

@@ -5,6 +5,7 @@ const state = {
   searchOpen: false,
   searchIndex: -1,
   tocOpen: false,
+  colorTheme: 'light',
   cache: new Map(),
   pending: null,
 };
@@ -194,6 +195,35 @@ function updateHistory(url, title, html, replace = false) {
   } else {
     history.pushState(data, title, url);
   }
+}
+
+function getPreferredTheme() {
+  try {
+    const stored = localStorage.getItem('itheme-color-scheme');
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch {}
+  const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return systemDark ? 'dark' : 'light';
+}
+
+function applyColorTheme(theme) {
+  state.colorTheme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.classList.toggle('theme-dark', state.colorTheme === 'dark');
+  document.documentElement.style.colorScheme = state.colorTheme === 'dark' ? 'dark' : 'light';
+  const toggle = byId('theme-toggle');
+  if (toggle) {
+    toggle.innerHTML = state.colorTheme === 'dark'
+      ? '日间<strong>DAY</strong>'
+      : '夜间<strong>NIGHT</strong>';
+  }
+}
+
+function toggleColorTheme() {
+  const next = state.colorTheme === 'dark' ? 'light' : 'dark';
+  applyColorTheme(next);
+  try {
+    localStorage.setItem('itheme-color-scheme', next);
+  } catch {}
 }
 
 function setSearchMode(open) {
@@ -572,7 +602,7 @@ async function submitComment(event) {
       return;
     }
 
-    const redirect = response.headers.get('Location') || response.headers.get('location') || state.pageUrl;
+    const redirect = response.headers.get('Location') || response.headers.get('location') || window.location.href;
     await loadCommentFragment(redirect.split('#')[0]);
 
     form.reset();
@@ -826,6 +856,16 @@ function bindDirectory() {
   });
 }
 
+function bindThemeToggle() {
+  applyColorTheme(getPreferredTheme());
+  const toggle = byId('theme-toggle');
+  if (!toggle) return;
+  toggle.onclick = () => {
+    toggleColorTheme();
+    return false;
+  };
+}
+
 function bindComments() {
   const form = byId('comment-form');
   if (form) {
@@ -862,6 +902,7 @@ function bindAll() {
   bindToolButtons();
   bindDirectory();
   bindComments();
+  bindThemeToggle();
   clearTOC();
   if (byId('post') || byId('page')) {
     createTOC();

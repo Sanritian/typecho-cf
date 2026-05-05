@@ -22,7 +22,7 @@ const isCommentFragment = props.renderMode === 'comment';
   ) : (
     <>
       <a><h1 id="post">{props.post.title}</h1></a>
-      <p><a>{formatDate(props.post.created, 'M d,Y', props.options.timezone)}</a></p>
+      <p><a>{formatDate(props.post.created, 'M d Y', props.options.timezone).toUpperCase()}</a></p>
       <article set:html={props.post.content}></article>
       <p class="tag-a">
         <i class="i tag"></i>
