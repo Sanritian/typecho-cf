@@ -201,3 +201,6 @@ html.theme-dark .TOCEntry:hover{background:#1c1c1c}
 html.theme-dark #backdrop.open{background:rgba(0,0,0,.6)}
 html.theme-dark .gray{background:#4b4b4b}
 html.theme-dark .red{background:#8b2d2d}
+@media print,screen and (max-width:720px){
+html.theme-dark #bar{background:#131313}
+}
