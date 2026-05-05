@@ -1,0 +1,81 @@
+---
+import type { CommentNode, CommentOptions, ThemeBaseProps } from '@/lib/theme-props';
+import CommentTree from './CommentTree.astro';
+import { getCommentCountLabel } from './shared';
+
+interface Props extends ThemeBaseProps {
+  cid: number;
+  permalink: string;
+  allowComment: boolean;
+  comments: CommentNode[];
+  commentOptions: CommentOptions;
+  isPost?: boolean;
+}
+
+const {
+  cid,
+  permalink,
+  allowComment,
+  comments,
+  commentOptions,
+  isPost = true,
+  isLoggedIn,
+  urls,
+  user,
+} = Astro.props;
+---
+<div id="comments">
+  <span id="hf">respond</span>
+  {allowComment && <p class="time">{getCommentCountLabel(commentOptions.totalItems)}</p>}
+  {allowComment && (
+    <div id="respond" class="respond">
+      <div class="cancel-comment-reply" style="display:none">
+        <span class="reply-name"></span>
+        <a href="javascript:void(0)" id="cancel-comment-reply-link" rel="nofollow" onclick="return TypechoComment.cancelReply();" nohover>×</a>
+      </div>
+      <form method="post" action="/api/comment" id="comment-form" role="form">
+        <input type="hidden" name="cid" value={String(cid)} />
+        <input type="hidden" name="parent" id="comment-parent" value="0" />
+        {commentOptions.securityToken && (
+          <input type="hidden" name="_" value={commentOptions.securityToken} />
+        )}
+        <textarea rows="8" cols="50" name="text" id="textarea" class="textarea" required></textarea>
+        <div class="comment-input">
+          {isLoggedIn ? (
+            <p class="anu">
+              登录身份:
+              {' '}
+              <a href={urls.profileUrl}>{user?.screenName || user?.name}</a>
+              {' '}|{' '}
+              <a href={urls.logoutUrl}>退出 &raquo;</a>
+            </p>
+          ) : (
+            <>
+              <input type="text" name="author" id="author" class="text" placeholder="Name *" required />
+              <input type="email" name="mail" id="mail" class="text" placeholder="Mail *" required={commentOptions.requireMail} />
+              <input type="url" name="url" id="url" class="text" placeholder="Url" required={false} />
+            </>
+          )}
+          <button type="submit" id="submit">发射</button>
+          <input type="hidden" name="receiveMail" id="receiveMail" value="yes" />
+        </div>
+      </form>
+    </div>
+  )}
+
+  {comments.length > 0 && (
+    <ol id="comment-list" class="comment-list">
+      <CommentTree comments={comments} commentOptions={commentOptions} />
+    </ol>
+  )}
+
+  {commentOptions.pageBreak && commentOptions.totalPages > 1 && (
+    <div id="comment-page-nav" class="page-navigator">
+      {commentOptions.prevUrl && <a href={commentOptions.prevUrl} class="prev">上一页</a>}
+      {commentOptions.pageLinks.map((item) => (
+        <a href={item.url} class:list={[{ current: item.current }]}>{item.page}</a>
+      ))}
+      {commentOptions.nextUrl && <a href={commentOptions.nextUrl} class="next">下一页</a>}
+    </div>
+  )}
+</div>

@@ -1,0 +1,59 @@
+---
+import type { CommentNode, CommentOptions } from '@/lib/theme-props';
+import { formatTimeAgo } from './shared';
+
+interface Props {
+  comments: CommentNode[];
+  commentOptions: CommentOptions;
+}
+
+const { comments } = Astro.props;
+---
+{comments.map((node) => (
+  <li
+    id={`comment-${node.coid}`}
+    class={`comment-body ${node.parent > 0 ? 'comment-child comment-level-odd' : 'comment-parent'} ${node.authorId && node.authorId === node.ownerId ? 'comment-by-author' : node.authorId ? 'comment-by-user' : ''}`}
+  >
+    <div class="commentator-comment">
+      <div class="name">
+        <p>
+          <span class="commentator-name">
+            <strong class="author_name">{node.author}</strong>
+            {node.replyToAuthor && (
+              <>
+                {' '}
+                <a
+                  class="at"
+                  href={`#comment-${node.parent}`}
+                  onclick={`if(window.scrollt){window.scrollt('comment-${node.parent}');return false;}return true;`}
+                >
+                  @{node.replyToAuthor}
+                </a>
+              </>
+            )}
+          </span>
+          <span class="comment-time">{formatTimeAgo(node.created)}</span>
+          <span class="comment-reply">
+            <a
+              class="i reply"
+              href="javascript:void(0)"
+              rel="nofollow"
+              data-theid={`comment-${node.coid}`}
+              onclick={`return TypechoComment.reply('comment-${node.coid}', ${node.coid}, '@${node.author}', '#comment-${node.coid}');`}
+            ></a>
+          </span>
+        </p>
+      </div>
+      <div class="comment-chat" data-link={`#comment-${node.coid}`}>
+        <div class="comment-comment" set:html={node.text}></div>
+      </div>
+    </div>
+    {node.children.length > 0 && (
+      <div class="comment-children">
+        <ol class="comment-list">
+          <Astro.self comments={node.children} commentOptions={Astro.props.commentOptions} />
+        </ol>
+      </div>
+    )}
+  </li>
+))}

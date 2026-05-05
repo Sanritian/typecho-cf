@@ -1,0 +1,39 @@
+---
+import type { ThemePostProps } from '@/lib/theme-props';
+import Layout from './Layout.astro';
+import Comments from './Comments.astro';
+import { formatDate } from '@/lib/content';
+
+type Props = ThemePostProps;
+const props = Astro.props;
+const isCommentFragment = props.renderMode === 'comment';
+---
+<Layout {...props} pageTitle={`${props.post.title} - ${props.options.title}`}>
+  {isCommentFragment ? (
+    <Comments
+      {...props}
+      cid={props.post.cid}
+      permalink={props.post.permalink}
+      allowComment={props.post.allowComment}
+      comments={props.comments}
+      commentOptions={props.commentOptions}
+      isPost={true}
+    />
+  ) : (
+    <>
+      <a><h1 id="post">{props.post.title}</h1></a>
+      <p><a>{formatDate(props.post.created, 'M d,Y', props.options.timezone)}</a></p>
+      <article set:html={props.post.content}></article>
+      <p class="tag-a">
+        <i class="i tag"></i>
+        {props.tags.length > 0 ? props.tags.map((tag) => <a href={tag.permalink}>{tag.name}</a>) : 'none'}
+        {props.post.allowComment && (
+          <a id="response" href="javascript:void(0)" onclick="if(window.commentlist){window.commentlist();return false;}return false;">
+            <i class="i reply"></i>
+            <span id="pls">{props.commentOptions.totalItems}</span>&nbsp;
+          </a>
+        )}
+      </p>
+    </>
+  )}
+</Layout>

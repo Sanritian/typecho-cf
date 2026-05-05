@@ -17,6 +17,7 @@ import { renderContentExcerpt, renderMarkdown, renderMarkdownFiltered } from '@/
 import { paginate } from '@/lib/pagination';
 import { generateCommentToken } from '@/lib/auth';
 import type { RequestContext } from '@/lib/context';
+import { loadThemeConfig } from '@/lib/theme';
 import type {
   ThemeIndexProps, ThemePostProps, ThemePageProps, ThemeArchiveProps, ThemeNotFoundProps,
   PostListItem, CommentNode, CommentOptions,
@@ -36,12 +37,34 @@ type AuthorMap = Map<number, UserRow>;
 
 async function loadCommon(ctx: RequestContext, requestUrl: string) {
   const { db, options, urls, user, isLoggedIn } = ctx;
-  const [sidebarData, pages] = await Promise.all([
+  const activeThemeId = options.theme || 'typecho-theme-minimal';
+  const [sidebarData, pages, categoryRows] = await Promise.all([
     loadSidebarData(db, urls.siteUrl, options.permalinkPattern as string | undefined, options.categoryPattern as string | undefined),
     loadNavPages(db, urls.siteUrl, options.pagePattern as string | undefined),
+    db.select().from(schema.metas).where(eq(schema.metas.type, 'category')).orderBy(schema.metas.order),
   ]);
   const currentPath = new URL(requestUrl).pathname;
-  return { options, urls, user, isLoggedIn, pages, sidebarData, currentPath };
+  return {
+    options,
+    urls,
+    user,
+    isLoggedIn,
+    pages,
+    sidebarData,
+    allCategories: categoryRows.map((row) => ({
+      mid: row.mid,
+      parent: row.parent || 0,
+      name: row.name || '',
+      slug: row.slug || '',
+      count: row.count || 0,
+      permalink: buildCategoryLink(row.slug || '', urls.siteUrl, options.categoryPattern as string | undefined),
+    })),
+    currentPath,
+    activeThemeId,
+    themeConfig: loadThemeConfig(options as Record<string, unknown>, activeThemeId),
+    isAjaxRequest: !!ctx.render.isAjaxRequest,
+    renderMode: ctx.render.renderMode || undefined,
+  };
 }
 
 function getPage(locals: Record<string, unknown>, url: URL): number {
@@ -67,6 +90,10 @@ function buildCommentTree(allComments: CommentRow[]): CommentNode[] {
       url: c.url || '',
       text: renderMarkdown(c.text || ''),
       created: c.created || 0,
+      parent: c.parent || 0,
+      authorId: c.authorId || 0,
+      ownerId: c.ownerId || 0,
+      replyToAuthor: undefined,
       children: [],
     });
   }
@@ -74,7 +101,9 @@ function buildCommentTree(allComments: CommentRow[]): CommentNode[] {
   for (const c of allComments) {
     const node = map.get(c.coid)!;
     if (c.parent && map.has(c.parent)) {
-      map.get(c.parent)!.children.push(node);
+      const parentNode = map.get(c.parent)!;
+      node.replyToAuthor = parentNode.author;
+      parentNode.children.push(node);
     } else {
       roots.push(node);
     }
@@ -93,7 +122,18 @@ async function buildGravatarMap(allComments: CommentRow[], avatarRating: string)
   return Object.fromEntries(entries);
 }
 
-function buildCommentOptions(options: SiteOptions, securityToken: string): CommentOptions {
+function buildCommentOptions(
+  options: SiteOptions,
+  securityToken: string,
+  pageMeta?: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    pageLinks: Array<{ page: number; url: string; current: boolean }>;
+    prevUrl: string | null;
+    nextUrl: string | null;
+  },
+): CommentOptions {
   return {
     allowComment: true,
     requireMail: !!options.commentsRequireMail,
@@ -113,6 +153,113 @@ function buildCommentOptions(options: SiteOptions, securityToken: string): Comme
     pageSize: Number(options.commentsPageSize) || 20,
     pageDisplay: (options.commentsPageDisplay === 'first' ? 'first' : 'last') as 'first' | 'last',
     htmlTagAllowed: options.commentsHTMLTagAllowed || '',
+    currentPage: pageMeta?.currentPage || 1,
+    totalPages: pageMeta?.totalPages || 1,
+    totalItems: pageMeta?.totalItems || 0,
+    pageLinks: pageMeta?.pageLinks || [],
+    prevUrl: pageMeta?.prevUrl || null,
+    nextUrl: pageMeta?.nextUrl || null,
+  };
+}
+
+function getCommentPage(url: URL): number {
+  const fromQuery = parseInt(url.searchParams.get('commentPage') || '0', 10);
+  if (fromQuery > 0) return fromQuery;
+  return 1;
+}
+
+function buildCommentPageUrl(baseUrl: string, page: number): string {
+  const normalized = baseUrl.replace(/\/$/, '');
+  return `${normalized}/comment-page-${page}/#comments`;
+}
+
+function flattenCommentTree(nodes: CommentNode[]): CommentNode[] {
+  const result: CommentNode[] = [];
+  const walk = (items: CommentNode[]) => {
+    for (const item of items) {
+      result.push(item);
+      if (item.children.length > 0) {
+        walk(item.children);
+      }
+    }
+  };
+  walk(nodes);
+  return result;
+}
+
+function paginateComments(
+  allComments: CommentRow[],
+  options: SiteOptions,
+  baseUrl: string,
+  url: URL,
+): {
+  commentTree: CommentNode[];
+  pageMeta: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    pageLinks: Array<{ page: number; url: string; current: boolean }>;
+    prevUrl: string | null;
+    nextUrl: string | null;
+  };
+} {
+  const fullTree = buildCommentTree(allComments);
+  const flat = flattenCommentTree(fullTree);
+  const totalItems = flat.length;
+  const pageBreak = !!options.commentsPageBreak;
+
+  if (!pageBreak || totalItems === 0) {
+    return {
+      commentTree: fullTree,
+      pageMeta: {
+        currentPage: 1,
+        totalPages: 1,
+        totalItems,
+        pageLinks: totalItems > 0 ? [{ page: 1, url: buildCommentPageUrl(baseUrl, 1), current: true }] : [],
+        prevUrl: null,
+        nextUrl: null,
+      },
+    };
+  }
+
+  const requestedPage = getCommentPage(url);
+  const pageSize = Math.max(1, Number(options.commentsPageSize) || 20);
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(Math.max(1, requestedPage), totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const pageItems = flat.slice(start, start + pageSize);
+  const pageSet = new Set(pageItems.map((item) => item.coid));
+
+  const filterTree = (nodes: CommentNode[]): CommentNode[] => {
+    const result: CommentNode[] = [];
+    for (const node of nodes) {
+      const filteredChildren = filterTree(node.children);
+      if (pageSet.has(node.coid) || filteredChildren.length > 0) {
+        result.push({ ...node, children: filteredChildren });
+      }
+    }
+    return result;
+  };
+
+  const pageLinks = Array.from({ length: totalPages }, (_, index) => {
+    const page = index + 1;
+    return {
+      page,
+      url: buildCommentPageUrl(baseUrl, page),
+      current: page === currentPage,
+    };
+  });
+
+  return {
+    commentTree: filterTree(fullTree),
+    pageMeta: {
+      currentPage,
+      totalPages,
+      totalItems,
+      pageLinks,
+      prevUrl: currentPage > 1 ? buildCommentPageUrl(baseUrl, currentPage - 1) : null,
+      nextUrl: currentPage < totalPages ? buildCommentPageUrl(baseUrl, currentPage + 1) : null,
+    },
   };
 }
 
@@ -350,6 +497,12 @@ export async function preparePostData(
     .orderBy(asc(schema.contents.created))
     .limit(1);
 
+  const permalink = buildPermalink(
+    { cid: contentRow.cid, slug: contentRow.slug, type: contentRow.type, created: contentRow.created, category: categories[0]?.slug },
+    urls.siteUrl,
+    options.permalinkPattern as string | undefined,
+  );
+
   // Comments
   const commentsOrder = options.commentsOrder === 'DESC' ? desc(schema.comments.created) : asc(schema.comments.created);
   const allComments = await db
@@ -358,14 +511,8 @@ export async function preparePostData(
     .where(and(eq(schema.comments.cid, cidNum), eq(schema.comments.status, 'approved')))
     .orderBy(commentsOrder);
 
-  const commentTree = buildCommentTree(allComments);
+  const { commentTree, pageMeta } = paginateComments(allComments, options, permalink, new URL(requestUrl));
   const gravatarMap = await buildGravatarMap(allComments, options.commentsAvatarRating || 'G');
-
-  const permalink = buildPermalink(
-    { cid: contentRow.cid, slug: contentRow.slug, type: contentRow.type, created: contentRow.created, category: categories[0]?.slug },
-    urls.siteUrl,
-    options.permalinkPattern as string | undefined,
-  );
 
   const allowComment = contentRow.allowComment === '1';
   const renderedContent = hasPassword && !passwordVerified
@@ -397,7 +544,7 @@ export async function preparePostData(
     categories,
     tags,
     comments: commentTree,
-    commentOptions: { ...buildCommentOptions(options, securityToken), allowComment },
+    commentOptions: { ...buildCommentOptions(options, securityToken, pageMeta), allowComment },
     prevPost: prevPost[0] ? {
       title: prevPost[0].title || '无标题',
       permalink: buildPermalink(prevPost[0], urls.siteUrl, options.permalinkPattern as string | undefined),
@@ -443,6 +590,10 @@ export async function preparePageData(
   const hasPassword = !!pageRow.password;
   const passwordVerified = hasPassword && suppliedPassword === pageRow.password;
 
+  const renderedContent = hasPassword && !passwordVerified
+    ? '<p>此内容已加密，请输入密码访问。</p>'
+    : await renderMarkdownFiltered(pageRow.text || '');
+
   // Comments
   const commentsOrder = options.commentsOrder === 'DESC' ? desc(schema.comments.created) : asc(schema.comments.created);
   const allComments = await db
@@ -451,13 +602,9 @@ export async function preparePageData(
     .where(and(eq(schema.comments.cid, pageRow.cid), eq(schema.comments.status, 'approved')))
     .orderBy(commentsOrder);
 
-  const commentTree = buildCommentTree(allComments);
+  const { commentTree, pageMeta } = paginateComments(allComments, options, permalink, new URL(requestUrl));
   const gravatarMap = await buildGravatarMap(allComments, options.commentsAvatarRating || 'G');
   const allowComment = pageRow.allowComment === '1';
-
-  const renderedContent = hasPassword && !passwordVerified
-    ? '<p>此内容已加密，请输入密码访问。</p>'
-    : await renderMarkdownFiltered(pageRow.text || '');
 
   const common = await loadCommon(ctx, requestUrl);
 
@@ -480,7 +627,7 @@ export async function preparePageData(
       passwordVerified,
     },
     comments: commentTree,
-    commentOptions: { ...buildCommentOptions(options, securityToken), allowComment },
+    commentOptions: { ...buildCommentOptions(options, securityToken, pageMeta), allowComment },
     gravatarMap,
   };
 }

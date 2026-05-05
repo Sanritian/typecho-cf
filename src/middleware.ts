@@ -76,6 +76,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.rewrite(basePath === '' ? '/' : basePath + '/');
   }
 
+  // 评论分页 URL 重写
+  // 兼容 Typecho 风格的 /comment-page-N/ 后缀，供主题异步评论加载和分页使用。
+  const commentPaginationMatch = path.match(/^(.*)\/comment-page-(\d+)\/?$/);
+  if (commentPaginationMatch) {
+    const basePath = commentPaginationMatch[1] || '';
+    const pageNum = parseInt(commentPaginationMatch[2], 10);
+    (context.locals as any)._commentPage = pageNum;
+
+    const rewrittenUrl = new URL(context.request.url);
+    rewrittenUrl.pathname = basePath === '' ? '/' : `${basePath}/`;
+    rewrittenUrl.searchParams.set('commentPage', String(pageNum));
+    return context.rewrite(rewrittenUrl);
+  }
+
   // Check installation status — redirect to /install if DB not ready.
   // Once tables are confirmed, skip the check for the isolate's lifetime.
   const d1 = env.DB;

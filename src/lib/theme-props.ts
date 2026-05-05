@@ -25,8 +25,18 @@ export interface ThemeBaseProps {
   pages: Array<{ title: string; slug: string; permalink: string }>;
   /** Sidebar widget data */
   sidebarData: SidebarData;
+  /** 全量分类数据，供主题自行组织树结构或目录导航 */
+  allCategories: Array<{ mid: number; parent: number; name: string; slug: string; count: number; permalink: string }>;
   /** Current request path */
   currentPath: string;
+  /** 当前主题标识 */
+  activeThemeId: string;
+  /** 当前主题配置，来自 options 表中的 `theme:<themeId>` */
+  themeConfig: Record<string, unknown>;
+  /** 是否为异步片段请求（如 PJAX / AJAX 局部刷新） */
+  isAjaxRequest: boolean;
+  /** 主题可识别的渲染模式，例如 `comment` */
+  renderMode?: string;
 }
 
 // ─── Post list item (used by Index & Archive) ───────────────────────────
@@ -120,6 +130,10 @@ export interface CommentNode {
   /** Rendered HTML */
   text: string;
   created: number;
+  parent: number;
+  authorId: number;
+  ownerId: number;
+  replyToAuthor?: string;
   children: CommentNode[];
 }
 
@@ -163,6 +177,18 @@ export interface CommentOptions {
   // ─── HTML Filtering ─────────────────────────
   /** Allowed HTML tags/attributes in comments (semicolon-separated) */
   htmlTagAllowed: string;
+  /** 当前评论分页页码，1-based */
+  currentPage: number;
+  /** 评论总页数 */
+  totalPages: number;
+  /** 评论总数量（当前文章/页面下，审核通过） */
+  totalItems: number;
+  /** 评论分页跳转链接 */
+  pageLinks: Array<{ page: number; url: string; current: boolean }>;
+  /** 上一页链接 */
+  prevUrl: string | null;
+  /** 下一页链接 */
+  nextUrl: string | null;
 }
 
 // ─── 404 Not Found ──────────────────────────────────────────────────────

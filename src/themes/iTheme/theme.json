@@ -1,0 +1,35 @@
+{
+  "id": "iTheme",
+  "name": "iTheme",
+  "description": "极简文字主题，支持异步页面切换、评论异步、实时搜索、图片懒加载与目录导航。",
+  "author": "Typecho CF",
+  "version": "1.0.0",
+  "homepage": "https://github.com/eslizn/typecho-cf",
+  "license": "MIT",
+  "stylesheet": "style.css",
+  "screenshot": "screenshot.png",
+  "config": {
+    "t": {
+      "type": "text",
+      "label": "标题",
+      "default": "iTheme"
+    },
+    "s": {
+      "type": "text",
+      "label": "副标题",
+      "default": "文字"
+    },
+    "dh": {
+      "type": "textarea",
+      "label": "导航",
+      "default": "<ul class=\"menu\"><li><a href=\"/\">主页<strong>HOME</strong></a></li><li><a id=\"s\">搜索<strong>SEARCH</strong></a></li></ul>",
+      "description": "直接填写导航 HTML，保持与旧主题等价的可配置能力。"
+    },
+    "fl": {
+      "type": "text",
+      "label": "目录",
+      "default": "",
+      "description": "格式：分类ID，<a>显示名称<a>；可填写多个，逗号和分号均使用中文符号。"
+    }
+  }
+}

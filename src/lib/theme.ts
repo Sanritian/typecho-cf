@@ -37,6 +37,23 @@ export interface ThemeManifest {
   license?: string;
   /** Tags for categorization */
   tags?: string[];
+  /**
+   * 主题配置字段定义。
+   * 存储格式与插件配置一致，落在 options 表中，键名为 `theme:<themeId>`。
+   */
+  config?: Record<string, ThemeConfigField>;
+}
+
+/**
+ * 主题配置字段定义。
+ * 设计上与插件配置复用同一套表单元数据，减少后台实现分叉。
+ */
+export interface ThemeConfigField {
+  type: 'text' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'password' | 'hidden';
+  label: string;
+  description?: string;
+  default?: string | number | string[];
+  options?: Record<string, string>;
 }
 
 export interface ThemeInfo {
@@ -202,4 +219,63 @@ export function themeExists(themeId: string): boolean {
  */
 export function getThemeCount(): number {
   return themeRegistry.size;
+}
+
+/**
+ * 获取指定主题信息。
+ */
+export function getTheme(themeId: string): ThemeInfo | undefined {
+  return themeRegistry.get(themeId);
+}
+
+/**
+ * 判断主题是否声明了配置项。
+ */
+export function themeHasConfig(themeId: string): boolean {
+  const theme = themeRegistry.get(themeId);
+  if (!theme?.manifest.config) return false;
+  return Object.keys(theme.manifest.config).length > 0;
+}
+
+/**
+ * 获取主题配置默认值。
+ */
+export function getThemeConfigDefaults(themeId: string): Record<string, unknown> {
+  const theme = themeRegistry.get(themeId);
+  if (!theme?.manifest.config) return {};
+
+  const defaults: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(theme.manifest.config)) {
+    if (field.default !== undefined) {
+      defaults[key] = field.default;
+    } else if (field.type === 'checkbox') {
+      defaults[key] = [];
+    } else {
+      defaults[key] = '';
+    }
+  }
+  return defaults;
+}
+
+/**
+ * 从全站 options 中读取主题配置。
+ */
+export function loadThemeConfig(
+  options: Record<string, unknown>,
+  themeId: string,
+): Record<string, unknown> {
+  const defaults = getThemeConfigDefaults(themeId);
+  const raw = options?.[`theme:${themeId}`];
+
+  if (!raw) return { ...defaults };
+
+  try {
+    const saved = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!saved || typeof saved !== 'object') {
+      return { ...defaults };
+    }
+    return { ...defaults, ...(saved as Record<string, unknown>) };
+  } catch {
+    return { ...defaults };
+  }
 }

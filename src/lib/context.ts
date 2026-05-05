@@ -45,6 +45,10 @@ export interface RequestContext {
   user: UserRow | null;
   isLoggedIn: boolean;
   csrfToken: string | null;
+  render: {
+    isAjaxRequest: boolean;
+    renderMode: string | null;
+  };
 }
 
 /**
@@ -92,7 +96,23 @@ export async function createContext(locals: App.Locals, request: Request): Promi
     ? await generateSecurityToken(options.secret as string, user.authCode!, user.uid)
     : null;
 
-  const ctx = { db, options, urls, user, isLoggedIn, csrfToken };
+  const requestUrl = new URL(request.url);
+  const rawRenderMode = requestUrl.searchParams.get('c');
+  const renderMode = rawRenderMode === 'a' ? 'comment' : rawRenderMode;
+  const isAjaxHeader = (request.headers.get('x-requested-with') || '').toLowerCase() === 'xmlhttprequest';
+  const isAjaxParam = requestUrl.searchParams.get('ajax') === '1';
+  const ctx = {
+    db,
+    options,
+    urls,
+    user,
+    isLoggedIn,
+    csrfToken,
+    render: {
+      isAjaxRequest: isAjaxHeader || isAjaxParam || !!rawRenderMode,
+      renderMode,
+    },
+  };
 
   // Trigger system:begin hook
   await doHook('system:begin', ctx);

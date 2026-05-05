@@ -1,0 +1,19 @@
+{
+  "name": "itheme",
+  "version": "1.0.0",
+  "description": "简洁的文字主题，完整支持异步页面切换、评论异步和实时搜索。",
+  "author": "Typecho CF",
+  "license": "MIT",
+  "keywords": [
+    "typecho",
+    "theme",
+    "itheme"
+  ],
+  "files": [
+    "theme.json",
+    "style.css",
+    "screenshot.png",
+    "assets/",
+    "components/"
+  ]
+}

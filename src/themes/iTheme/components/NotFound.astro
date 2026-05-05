@@ -1,0 +1,13 @@
+---
+import type { ThemeNotFoundProps } from '@/lib/theme-props';
+import Layout from './Layout.astro';
+
+type Props = ThemeNotFoundProps;
+const props = Astro.props;
+---
+<Layout {...props} pageTitle={`${props.errorTitle} - ${props.options.title}`}>
+  <h1 id="page">{props.errorTitle}</h1>
+  <article>
+    <p>你想查看的页面已被转移或删除了, 要不要搜索看看:</p>
+  </article>
+</Layout>

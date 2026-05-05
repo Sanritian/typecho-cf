@@ -1,0 +1,27 @@
+---
+import type { ThemePageProps } from '@/lib/theme-props';
+import Layout from './Layout.astro';
+import Comments from './Comments.astro';
+
+type Props = ThemePageProps;
+const props = Astro.props;
+const isCommentFragment = props.renderMode === 'comment';
+---
+<Layout {...props} pageTitle={`${props.page.title} - ${props.options.title}`}>
+  {isCommentFragment ? (
+    <Comments
+      {...props}
+      cid={props.page.cid}
+      permalink={props.page.permalink}
+      allowComment={props.page.allowComment}
+      comments={props.comments}
+      commentOptions={props.commentOptions}
+      isPost={false}
+    />
+  ) : (
+    <>
+      <h1 id="page">{props.page.title}</h1>
+      <article set:html={props.page.content}></article>
+    </>
+  )}
+</Layout>

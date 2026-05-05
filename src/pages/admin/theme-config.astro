@@ -1,0 +1,177 @@
+---
+/**
+ * Theme Configuration Page
+ *
+ * 基于主题 manifest.config 动态渲染配置表单。
+ */
+import Admin from '@/layouts/Admin.astro';
+import { createContext, requireAuth } from '@/lib/context';
+import { hasPermission, requireAdminCSRF } from '@/lib/auth';
+import {
+  getTheme,
+  themeHasConfig,
+  loadThemeConfig,
+  type ThemeConfigField,
+} from '@/lib/theme';
+
+const ctx = await createContext(Astro.locals, Astro.request);
+const authCheck = requireAuth(ctx);
+if (authCheck) return authCheck;
+
+if (!hasPermission(ctx.user!.group || 'visitor', 'administrator')) {
+  return new Response('Forbidden', { status: 403 });
+}
+
+const { options, urls, user, csrfToken } = ctx;
+
+const themeId = Astro.url.searchParams.get('id') || '';
+const theme = getTheme(themeId);
+
+if (!theme || !themeHasConfig(themeId)) {
+  return Astro.redirect('/admin/themes');
+}
+
+const configDef = theme.manifest.config!;
+const configValues = loadThemeConfig(options, themeId);
+
+let message = '';
+let messageType = '';
+
+if (Astro.request.method === 'POST') {
+  const csrfError = await requireAdminCSRF(Astro.request, options.secret as string, user!.authCode!, user!.uid);
+  if (csrfError) return csrfError;
+
+  try {
+    const formData = await Astro.request.formData();
+    const { setOption } = await import('@/lib/options');
+
+    const settings: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(configDef)) {
+      if (field.type === 'checkbox') {
+        settings[key] = formData.getAll(key).map((v) => v.toString());
+      } else {
+        settings[key] = formData.get(key)?.toString() ?? '';
+      }
+    }
+
+    await setOption(ctx.db, `theme:${themeId}`, JSON.stringify(settings));
+
+    const { purgeSiteCache } = await import('@/lib/cache');
+    await purgeSiteCache(options.siteUrl || '');
+
+    (options as any)[`theme:${themeId}`] = JSON.stringify(settings);
+    Object.assign(configValues, settings);
+
+    message = '主题设置已经保存';
+    messageType = 'success';
+  } catch {
+    message = '保存失败';
+    messageType = 'error';
+  }
+}
+
+const pageTitle = `设置主题 ${theme.manifest.name || themeId}`;
+---
+<Admin title={pageTitle} options={options} urls={urls} user={user} activeMenu="themes">
+  <div class="col-mb-12 col-tb-8 col-tb-offset-2" role="form">
+    {message && (
+      <div class={`typecho-option-tabs notice ${messageType === 'error' ? 'notice-error' : 'notice-success'}`}
+        style={`padding: 10px 15px; margin-bottom: 20px; border-radius: 3px; ${messageType === 'error' ? 'background: #ffeaea; color: #c33;' : 'background: #e7f5e7; color: #3a3;'}`}>
+        <p>{message}</p>
+      </div>
+    )}
+
+    <form method="post" action={`/admin/theme-config?id=${themeId}`}>
+      <input type="hidden" name="_" value={csrfToken} />
+      <ul class="typecho-option">
+        {Object.entries(configDef).map(([key, field]: [string, ThemeConfigField]) => {
+          const value = configValues[key] ?? field.default ?? '';
+
+          if (field.type === 'hidden') {
+            return (
+              <input type="hidden" name={key} value={String(value)} />
+            );
+          }
+
+          return (
+            <li>
+              <label for={`cfg-${key}`} class="typecho-label">{field.label}</label>
+
+              {field.type === 'text' && (
+                <p><input type="text" id={`cfg-${key}`} name={key} class="text w-100" value={String(value)} /></p>
+              )}
+
+              {field.type === 'password' && (
+                <p><input type="password" id={`cfg-${key}`} name={key} class="text w-100" value={String(value)} /></p>
+              )}
+
+              {field.type === 'textarea' && (
+                <p><textarea id={`cfg-${key}`} name={key} class="text w-100" rows="4">{String(value)}</textarea></p>
+              )}
+
+              {field.type === 'select' && field.options && (
+                <p>
+                  <select id={`cfg-${key}`} name={key}>
+                    {Object.entries(field.options).map(([optVal, optLabel]) => (
+                      <option value={optVal} selected={String(value) === optVal}>{optLabel}</option>
+                    ))}
+                  </select>
+                </p>
+              )}
+
+              {field.type === 'radio' && field.options && (
+                <p>
+                  {Object.entries(field.options).map(([optVal, optLabel]) => (
+                    <span style="margin-right: 15px;">
+                      <input
+                        type="radio"
+                        id={`cfg-${key}-${optVal}`}
+                        name={key}
+                        value={optVal}
+                        checked={String(value) === String(optVal)}
+                      />
+                      <label for={`cfg-${key}-${optVal}`}>{optLabel}</label>
+                    </span>
+                  ))}
+                </p>
+              )}
+
+              {field.type === 'checkbox' && field.options && (
+                <p>
+                  {Object.entries(field.options).map(([optVal, optLabel]) => {
+                    const checked = Array.isArray(value)
+                      ? value.includes(optVal)
+                      : String(value) === optVal;
+                    return (
+                      <span style="margin-right: 15px;">
+                        <input
+                          type="checkbox"
+                          id={`cfg-${key}-${optVal}`}
+                          name={key}
+                          value={optVal}
+                          checked={checked}
+                        />
+                        <label for={`cfg-${key}-${optVal}`}>{optLabel}</label>
+                      </span>
+                    );
+                  })}
+                </p>
+              )}
+
+              {field.description && (
+                <p class="description" set:html={field.description}></p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <ul class="typecho-option typecho-option-submit">
+        <li>
+          <button type="submit" class="btn primary">保存设置</button>
+          <a href="/admin/themes" class="btn" style="margin-left: 10px;">返回主题列表</a>
+        </li>
+      </ul>
+    </form>
+  </div>
+</Admin>
