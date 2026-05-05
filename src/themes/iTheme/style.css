@@ -30,6 +30,8 @@ header{width:155px;float:left;-webkit-font-smoothing:subpixel-antialiased;positi
 .menu li{width:100%}
 .menu a{display:block;font-size:1.4em;line-height:2;padding:5px}
 .menu a:focus,.menu a:hover{font-weight:700}
+.menu a:hover,.menu a:focus,.menu a.current{background-color:transparent}
+.menu a.current{font-weight:700}
 .menu ul a:active{background:#f0f0f0}
 #nav ul{margin:0}
 #nav li{display:block;position:relative}
@@ -184,6 +186,7 @@ code,pre{word-wrap:normal}
 html.theme-dark body{background:#111;color:#c9c9c9;text-shadow:none}
 html.theme-dark h1,html.theme-dark h2,html.theme-dark h3,html.theme-dark h4,html.theme-dark h5,html.theme-dark h6,html.theme-dark a,html.theme-dark strong{color:#f2f2f2}
 html.theme-dark a:hover,html.theme-dark a:focus{background-color:#1f1f1f;color:#fff}
+html.theme-dark .menu a:hover,html.theme-dark .menu a:focus,html.theme-dark .menu a.current{background-color:transparent}
 html.theme-dark a small,html.theme-dark a:hover small,html.theme-dark .menu a strong{color:#9d9d9d}
 html.theme-dark blockquote{border-left-color:#2d2d2d}
 html.theme-dark code,html.theme-dark pre{background:#1c1c1c;color:#efefef}

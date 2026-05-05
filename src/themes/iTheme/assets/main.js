@@ -6,6 +6,7 @@ const state = {
   searchIndex: -1,
   tocOpen: false,
   colorTheme: 'light',
+  activeNavHref: '',
   cache: new Map(),
   pending: null,
 };
@@ -204,6 +205,50 @@ function getPreferredTheme() {
   } catch {}
   const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   return systemDark ? 'dark' : 'light';
+}
+
+function normalizeHrefForCompare(href) {
+  try {
+    const url = new URL(href, window.location.origin);
+    const normalizedPath = url.pathname.replace(/\/$/, '') || '/';
+    return `${url.origin}${normalizedPath}`;
+  } catch {
+    return href || '';
+  }
+}
+
+function getStoredActiveNavHref() {
+  try {
+    return localStorage.getItem('itheme-active-nav') || '';
+  } catch {
+    return '';
+  }
+}
+
+function setStoredActiveNavHref(href) {
+  state.activeNavHref = href;
+  try {
+    localStorage.setItem('itheme-active-nav', href);
+  } catch {}
+}
+
+function updateNavActiveState() {
+  const current = state.activeNavHref || getStoredActiveNavHref();
+  const links = qsa('ul.menu a');
+  links.forEach((link) => {
+    const id = link.getAttribute('id') || '';
+    if (id === 'theme-toggle') {
+      link.classList.remove('current');
+      return;
+    }
+    if (id === 's') {
+      link.classList.toggle('current', current === 'SEARCH');
+      return;
+    }
+
+    const href = link.getAttribute('href') || '';
+    link.classList.toggle('current', current !== '' && normalizeHrefForCompare(href) === current);
+  });
 }
 
 function applyColorTheme(theme) {
@@ -700,6 +745,10 @@ function handleNavClick(event) {
 
   const target = new URL(href, window.location.origin);
   if (target.origin !== window.location.origin) return;
+  const id = link.getAttribute('id') || '';
+  if (link.closest('ul.menu') && id !== 'theme-toggle') {
+    setStoredActiveNavHref(id === 's' ? 'SEARCH' : normalizeHrefForCompare(target.href));
+  }
 
   event.preventDefault();
   navigate(target.href);
@@ -708,6 +757,16 @@ function handleNavClick(event) {
 function bindLinks() {
   qsa('a[href]').forEach((link) => {
     if (link.closest('#comments') && link.closest('#comment-page-nav')) return;
+    if (link.closest('#bar h1')) {
+      link.onclick = (event) => {
+        const href = link.getAttribute('href') || window.location.origin;
+        setStoredActiveNavHref(normalizeHrefForCompare(href));
+        updateNavActiveState();
+        event.preventDefault();
+        navigate(href);
+      };
+      return;
+    }
     link.removeEventListener('click', handleNavClick);
     link.addEventListener('click', handleNavClick);
   });
@@ -721,6 +780,8 @@ function bindSearch() {
 
   if (openButton) {
     openButton.onclick = () => {
+      setStoredActiveNavHref('SEARCH');
+      updateNavActiveState();
       setSearchMode(true);
       if (input) input.focus();
       return false;
@@ -768,6 +829,7 @@ function bindSearch() {
 
       if (event.key === 'Enter' && input.value.trim()) {
         event.preventDefault();
+        setStoredActiveNavHref('SEARCH');
         await navigate(`/search/${encodeURIComponent(input.value.trim())}/`);
       }
     };
@@ -781,6 +843,7 @@ function bindSearch() {
         showTip('请输入搜索内容!', false);
         return false;
       }
+      setStoredActiveNavHref('SEARCH');
       await navigate(`/search/${encodeURIComponent(keywords)}/`);
       return false;
     };
@@ -860,8 +923,11 @@ function bindThemeToggle() {
   applyColorTheme(getPreferredTheme());
   const toggle = byId('theme-toggle');
   if (!toggle) return;
-  toggle.onclick = () => {
+  toggle.onclick = (event) => {
     toggleColorTheme();
+    if (event && event.currentTarget && event.currentTarget.blur) {
+      event.currentTarget.blur();
+    }
     return false;
   };
 }
@@ -903,6 +969,7 @@ function bindAll() {
   bindDirectory();
   bindComments();
   bindThemeToggle();
+  updateNavActiveState();
   clearTOC();
   if (byId('post') || byId('page')) {
     createTOC();
