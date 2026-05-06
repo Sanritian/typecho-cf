@@ -206,7 +206,8 @@ code,pre{word-wrap:normal}
 .tool{padding:6px 20px}
 #Tsidebar{display:block}
 .menu a{font-size:1.5em;padding:10px 0}
-#bar .menu a,#nav a{text-align:center}
+#bar .menu,#nav{width:min(100%,220px);margin:0 auto}
+#bar .menu a,#nav a{text-align:left}
 #nav ul li em{top:15px;width:27px;height:27px}
 .TOCEntry:hover{background:0}
 #tip{bottom:90px}

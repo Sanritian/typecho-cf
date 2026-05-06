@@ -12,11 +12,13 @@
 import type { AstroIntegration } from 'astro';
 import { readFileSync, existsSync, readdirSync, mkdirSync, cpSync, statSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { discoverLocalPackageSources, toProjectImportPath } from './local-package-source.ts';
 
 interface DiscoveredTheme {
   id: string;
   packageName: string;
   packageDir: string;
+  importBase: string;
   manifest: Record<string, any>;
   cssFile: string;
   screenshotFile?: string;
@@ -45,10 +47,18 @@ function deriveThemeId(packageName: string, manifest?: Record<string, any>): str
 }
 
 function discoverThemes(rootDir: string): DiscoveredTheme[] {
-  const themes: DiscoveredTheme[] = [];
+  const themes = new Map<string, DiscoveredTheme>();
   const nodeModulesDir = join(rootDir, 'node_modules');
+  const localSources = discoverLocalPackageSources(rootDir);
 
-  if (!existsSync(nodeModulesDir)) return themes;
+  for (const [packageName, packageDir] of localSources) {
+    const theme = tryLoadTheme(rootDir, packageName, packageDir);
+    if (theme) {
+      themes.set(theme.id, theme);
+    }
+  }
+
+  if (!existsSync(nodeModulesDir)) return [...themes.values()];
 
   const entries = readdirSync(nodeModulesDir);
   for (const entry of entries) {
@@ -64,22 +74,23 @@ function discoverThemes(rootDir: string): DiscoveredTheme[] {
         for (const scopedEntry of scopedEntries) {
           if (scopedEntry.startsWith('.')) continue;
           try {
-            const pkgDir = realpathSync(join(scopeDir, scopedEntry));
-            const theme = tryLoadTheme(`${entry}/${scopedEntry}`, pkgDir);
-            if (theme) themes.push(theme);
+            const packageName = `${entry}/${scopedEntry}`;
+            const pkgDir = localSources.get(packageName) || realpathSync(join(scopeDir, scopedEntry));
+            const theme = tryLoadTheme(rootDir, packageName, pkgDir);
+            if (theme && !themes.has(theme.id)) themes.set(theme.id, theme);
           } catch { continue; }
         }
       } catch { continue; }
     } else {
       try {
-        const pkgDir = realpathSync(join(nodeModulesDir, entry));
-        const theme = tryLoadTheme(entry, pkgDir);
-        if (theme) themes.push(theme);
+        const pkgDir = localSources.get(entry) || realpathSync(join(nodeModulesDir, entry));
+        const theme = tryLoadTheme(rootDir, entry, pkgDir);
+        if (theme && !themes.has(theme.id)) themes.set(theme.id, theme);
       } catch { continue; }
     }
   }
 
-  return themes;
+  return [...themes.values()];
 }
 
 /**
@@ -87,7 +98,7 @@ function discoverThemes(rootDir: string): DiscoveredTheme[] {
  * First checks package.json keywords for ["typecho", "theme"],
  * then looks for theme.json or package.json.typecho.theme for manifest.
  */
-function tryLoadTheme(packageName: string, packageDir: string): DiscoveredTheme | null {
+function tryLoadTheme(rootDir: string, packageName: string, packageDir: string): DiscoveredTheme | null {
   const pkgJsonPath = join(packageDir, 'package.json');
   if (!existsSync(pkgJsonPath)) return null;
 
@@ -106,7 +117,7 @@ function tryLoadTheme(packageName: string, packageDir: string): DiscoveredTheme 
   if (existsSync(manifestPath)) {
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-      return buildTheme(packageName, packageDir, manifest);
+      return buildTheme(rootDir, packageName, packageDir, manifest);
     } catch (err) {
       console.warn(`[theme-loader] Failed to parse theme.json from ${packageName}:`, err);
       return null;
@@ -116,7 +127,7 @@ function tryLoadTheme(packageName: string, packageDir: string): DiscoveredTheme 
   // Fallback: package.json with typecho.theme field
   if (pkgJson.typecho?.theme) {
     const manifest = pkgJson.typecho.theme;
-    return buildTheme(packageName, packageDir, manifest);
+    return buildTheme(rootDir, packageName, packageDir, manifest);
   }
 
   // Fallback: construct manifest from package.json fields
@@ -126,10 +137,10 @@ function tryLoadTheme(packageName: string, packageDir: string): DiscoveredTheme 
     author: typeof pkgJson.author === 'string' ? pkgJson.author : pkgJson.author?.name || '',
     version: pkgJson.version || '0.0.0',
   };
-  return buildTheme(packageName, packageDir, manifest);
+  return buildTheme(rootDir, packageName, packageDir, manifest);
 }
 
-function buildTheme(packageName: string, packageDir: string, manifest: Record<string, any>): DiscoveredTheme | null {
+function buildTheme(rootDir: string, packageName: string, packageDir: string, manifest: Record<string, any>): DiscoveredTheme | null {
   const id = deriveThemeId(packageName, manifest);
   const cssFile = manifest.stylesheet || 'style.css';
   const cssPath = join(packageDir, cssFile);
@@ -146,6 +157,7 @@ function buildTheme(packageName: string, packageDir: string, manifest: Record<st
     id,
     packageName,
     packageDir,
+    importBase: toProjectImportPath(rootDir, packageDir),
     manifest: { ...manifest, id },
     cssFile,
     screenshotFile: findScreenshot(packageDir, manifest.screenshot),
@@ -242,8 +254,7 @@ function generateVirtualModule(discoveredThemes: DiscoveredTheme[]): string {
     for (const type of TEMPLATE_TYPES) {
       if (theme.components[type]) {
         const varName = `${capitalize(theme.id)}${type}`;
-        // Use the npm package path so Vite can resolve it properly
-        imports.push(`import ${varName} from '${theme.packageName}/components/${type}.astro';`);
+        imports.push(`import ${varName} from '${theme.importBase}/components/${type}.astro';`);
         compEntries.push(`${type}: ${varName}`);
       }
     }

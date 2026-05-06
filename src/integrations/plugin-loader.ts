@@ -10,11 +10,13 @@
 import type { AstroIntegration } from 'astro';
 import { readFileSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { discoverLocalPackageSources, toProjectImportPath } from './local-package-source.ts';
 
 interface DiscoveredPlugin {
   id: string;
   packageName: string;
   packageDir: string;
+  importBase: string;
   manifest: Record<string, any>;
   entryFile: string;
 }
@@ -56,10 +58,18 @@ function findEntryFile(packageDir: string, manifest?: Record<string, any>): stri
 }
 
 function discoverPlugins(rootDir: string): DiscoveredPlugin[] {
-  const plugins: DiscoveredPlugin[] = [];
+  const plugins = new Map<string, DiscoveredPlugin>();
   const nodeModulesDir = join(rootDir, 'node_modules');
+  const localSources = discoverLocalPackageSources(rootDir);
 
-  if (!existsSync(nodeModulesDir)) return plugins;
+  for (const [packageName, packageDir] of localSources) {
+    const plugin = tryLoadPlugin(rootDir, packageName, packageDir);
+    if (plugin) {
+      plugins.set(plugin.id, plugin);
+    }
+  }
+
+  if (!existsSync(nodeModulesDir)) return [...plugins.values()];
 
   const entries = readdirSync(nodeModulesDir);
   for (const entry of entries) {
@@ -75,22 +85,23 @@ function discoverPlugins(rootDir: string): DiscoveredPlugin[] {
         for (const scopedEntry of scopedEntries) {
           if (scopedEntry.startsWith('.')) continue;
           try {
-            const pkgDir = realpathSync(join(scopeDir, scopedEntry));
-            const plugin = tryLoadPlugin(`${entry}/${scopedEntry}`, pkgDir);
-            if (plugin) plugins.push(plugin);
+            const packageName = `${entry}/${scopedEntry}`;
+            const pkgDir = localSources.get(packageName) || realpathSync(join(scopeDir, scopedEntry));
+            const plugin = tryLoadPlugin(rootDir, packageName, pkgDir);
+            if (plugin && !plugins.has(plugin.id)) plugins.set(plugin.id, plugin);
           } catch { continue; }
         }
       } catch { continue; }
     } else {
       try {
-        const pkgDir = realpathSync(join(nodeModulesDir, entry));
-        const plugin = tryLoadPlugin(entry, pkgDir);
-        if (plugin) plugins.push(plugin);
+        const pkgDir = localSources.get(entry) || realpathSync(join(nodeModulesDir, entry));
+        const plugin = tryLoadPlugin(rootDir, entry, pkgDir);
+        if (plugin && !plugins.has(plugin.id)) plugins.set(plugin.id, plugin);
       } catch { continue; }
     }
   }
 
-  return plugins;
+  return [...plugins.values()];
 }
 
 /**
@@ -98,7 +109,7 @@ function discoverPlugins(rootDir: string): DiscoveredPlugin[] {
  * First checks package.json keywords for ["typecho", "plugin"],
  * then looks for plugin.json or package.json.typecho.plugin for manifest.
  */
-function tryLoadPlugin(packageName: string, packageDir: string): DiscoveredPlugin | null {
+function tryLoadPlugin(rootDir: string, packageName: string, packageDir: string): DiscoveredPlugin | null {
   const pkgJsonPath = join(packageDir, 'package.json');
   if (!existsSync(pkgJsonPath)) return null;
 
@@ -150,6 +161,7 @@ function tryLoadPlugin(packageName: string, packageDir: string): DiscoveredPlugi
     id,
     packageName,
     packageDir,
+    importBase: toProjectImportPath(rootDir, packageDir),
     manifest,
     entryFile,
   };
@@ -186,7 +198,7 @@ export default function pluginLoaderIntegration(): AstroIntegration {
 
           // Import and execute each plugin's entry (which calls addHook)
           const pluginImports = discoveredPlugins.map((plugin, idx) => {
-            return `import pluginInit_${idx} from '${plugin.packageName}/${plugin.entryFile}';`;
+            return `import pluginInit_${idx} from '${plugin.importBase}/${plugin.entryFile}';`;
           }).join('\n');
 
           const pluginInits = discoveredPlugins.map((plugin, idx) => {

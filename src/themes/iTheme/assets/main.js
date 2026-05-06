@@ -855,6 +855,7 @@ function clearTOC() {
   toc.className = '';
   toc.style.display = 'none';
   toc.innerHTML = '';
+  syncToolButtons();
 }
 
 function toggleTOC(force) {
@@ -872,19 +873,17 @@ function toggleTOC(force) {
   if (next) {
     syncTocActiveEntry();
   }
+  syncToolButtons();
 }
 
 function openSidebar(open) {
   const bar = byId('bar');
   const backdrop = byId('backdrop');
-  const sidebarButton = byId('Tsidebar');
-  const closeButton = byId('Tclose');
-  if (!bar || !backdrop || !sidebarButton || !closeButton) return;
+  if (!bar || !backdrop) return;
 
   bar.classList.toggle('hidden', !open);
   backdrop.classList.toggle('open', open);
-  sidebarButton.classList.toggle('close', open);
-  closeButton.classList.toggle('close', true);
+  syncToolButtons();
 }
 
 function closeTransientUi() {
@@ -1091,7 +1090,7 @@ function bindCommentPager() {
   });
 }
 
-async function renderPage(url, html, { replaceHistory = false } = {}) {
+async function renderPage(url, html, { replaceHistory = false, scrollTop = true } = {}) {
   const main = byId('main');
   if (!main) return;
 
@@ -1105,7 +1104,9 @@ async function renderPage(url, html, { replaceHistory = false } = {}) {
     updateHistory(url, document.title, main.innerHTML, false);
   }
   bindAll();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (scrollTop) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 async function navigate(url, { replace = false } = {}) {
@@ -1185,6 +1186,7 @@ function bindSearch() {
     openButton.onclick = () => {
       setStoredActiveNavHref('SEARCH');
       updateNavActiveState();
+      openSidebar(false);
       setSearchMode(true);
       if (input) input.focus();
       return false;
@@ -1287,15 +1289,32 @@ function bindToolButtons() {
 
   const closeButton = byId('Tclose');
   if (closeButton) {
-    closeButton.onclick = () => {
-      const main = byId('main');
-      if (main && state.returnHtml) {
-        main.innerHTML = state.returnHtml;
-        document.title = state.returnTitle;
-        window.scrollTo(0, state.returnScrollY || 0);
-        bindAll();
-        history.pushState({ title: state.returnTitle, url: state.returnUrl, html: state.returnHtml, scrollY: state.returnScrollY || 0 }, state.returnTitle, state.returnUrl);
-        history.replaceState({ title: state.returnTitle, url: state.returnUrl, html: state.returnHtml, scrollY: state.returnScrollY || 0 }, state.returnTitle, state.returnUrl);
+    closeButton.onclick = async () => {
+      if (state.returnHtml && state.returnUrl) {
+        const restoreScrollY = state.returnScrollY || 0;
+        const restoreUrl = state.returnUrl;
+        const restoreTitle = state.returnTitle;
+        const restoreHtml = state.returnHtml;
+        await renderPage(
+          restoreUrl,
+          `<section id="main">${restoreHtml}</section><title>${restoreTitle}</title>`,
+          { replaceHistory: true, scrollTop: false },
+        );
+        state.pageHtml = restoreHtml;
+        state.pageTitle = restoreTitle;
+        state.pageUrl = restoreUrl;
+        state.pageScrollY = restoreScrollY;
+        state.returnHtml = restoreHtml;
+        state.returnTitle = restoreTitle;
+        state.returnUrl = restoreUrl;
+        state.returnScrollY = restoreScrollY;
+        history.replaceState({
+          title: restoreTitle,
+          url: restoreUrl,
+          html: restoreHtml,
+          scrollY: restoreScrollY,
+        }, restoreTitle, restoreUrl);
+        window.scrollTo(0, restoreScrollY);
       }
       return false;
     };
@@ -1303,9 +1322,17 @@ function bindToolButtons() {
 }
 
 function syncToolButtons() {
+  const sidebarButton = byId('Tsidebar');
   const closeButton = byId('Tclose');
+  const sidebarOpen = !byId('bar')?.classList.contains('hidden');
+  const showReturnButton = !!state.returnHtml && isDetailPage() && !state.tocOpen;
+
+  if (sidebarButton) {
+    sidebarButton.classList.toggle('close', sidebarOpen);
+  }
+
   if (closeButton) {
-    closeButton.classList.toggle('close', !state.returnHtml || !isDetailPage());
+    closeButton.classList.toggle('close', !showReturnButton || sidebarOpen);
   }
 
   const commentsButton = byId('Tcomments');
@@ -1352,6 +1379,7 @@ function bindThemeToggle() {
   const toggle = byId('theme-toggle');
   if (!toggle) return;
   toggle.onclick = (event) => {
+    openSidebar(false);
     toggleColorTheme();
     if (event && event.currentTarget && event.currentTarget.blur) {
       event.currentTarget.blur();

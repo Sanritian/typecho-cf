@@ -37,6 +37,12 @@ describe('iTheme files', () => {
     expect(source).toContain('loadCommentFragment');
     expect(source).toContain('navigate(');
     expect(source).toContain('buildSearchResults');
+    expect(source).toContain('await renderPage(');
+    expect(source).toContain('scrollTop = true');
+    expect(source).toContain('replaceHistory: true, scrollTop: false');
+    expect(source).toContain('const restoreScrollY = state.returnScrollY || 0');
+    expect(source).toContain('history.replaceState({');
+    expect(source).not.toContain('history.pushState({ title: state.returnTitle');
   });
 
   it('converts uploaded images to avif in admin editors when supported', () => {
