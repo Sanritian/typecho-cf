@@ -24,7 +24,7 @@ const latestTime = props.posts.length > 0 ? props.posts[props.posts.length - 1].
       <tr class="none">
         <td>
           <i class="time">{formatTimeAgo(latestTime)}</i>
-          {props.pagination.hasNext && <a class="pagenext" href={props.pagination.nextUrl!}>下一页</a>}
+          {props.pagination.hasNext && <a class="next pagenext" href={props.pagination.nextUrl!}>下一页</a>}
         </td>
       </tr>
     </tbody>

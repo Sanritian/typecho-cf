@@ -2,6 +2,7 @@ const state = {
   pageHtml: '',
   pageTitle: document.title,
   pageUrl: window.location.href,
+  pageScrollY: 0,
   searchOpen: false,
   searchIndex: -1,
   tocOpen: false,
@@ -411,6 +412,7 @@ function rememberPage() {
   state.pageHtml = main.innerHTML;
   state.pageTitle = document.title;
   state.pageUrl = window.location.href;
+  state.pageScrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
   try {
     sessionStorage.setItem(normalizeUrl(window.location.href), state.pageHtml);
   } catch {}
@@ -465,7 +467,12 @@ function extractTitle(html) {
 }
 
 function updateHistory(url, title, html, replace = false) {
-  const data = { title, url, html };
+  const data = {
+    title,
+    url,
+    html,
+    scrollY: window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0,
+  };
   if (replace) {
     history.replaceState(data, title, url);
   } else {
@@ -965,12 +972,14 @@ async function renderPage(url, html, { replaceHistory = false } = {}) {
   const previousHtml = state.pageHtml;
   const previousTitle = state.pageTitle;
   const previousUrl = state.pageUrl;
+  const previousScrollY = state.pageScrollY;
   main.innerHTML = mainHtml;
   setSearchMode(false);
   document.title = extractTitle(html);
   state.pageUrl = previousUrl;
   state.pageHtml = previousHtml;
   state.pageTitle = previousTitle;
+  state.pageScrollY = previousScrollY;
   if (replaceHistory) {
     updateHistory(url, document.title, main.innerHTML, true);
   } else {
@@ -1173,10 +1182,10 @@ function bindToolButtons() {
       if (main && state.pageHtml) {
         main.innerHTML = state.pageHtml;
         document.title = state.pageTitle;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo(0, state.pageScrollY || 0);
         bindAll();
-        history.pushState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml }, state.pageTitle, state.pageUrl);
-        history.replaceState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml }, state.pageTitle, state.pageUrl);
+        history.pushState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml, scrollY: state.pageScrollY || 0 }, state.pageTitle, state.pageUrl);
+        history.replaceState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml, scrollY: state.pageScrollY || 0 }, state.pageTitle, state.pageUrl);
       }
       return false;
     };
@@ -1217,6 +1226,75 @@ function bindComments() {
   ensureSmileBox();
 }
 
+function getLastByClass(className) {
+  const items = qsa(`.${className}`);
+  return items.length > 0 ? items[items.length - 1] : null;
+}
+
+function updateMoreTime() {
+  const more = byId('more');
+  const lastTime = getLastByClass('time');
+  const loadmore = getLastByClass('loadmore');
+  if (more && lastTime && loadmore) {
+    more.textContent = lastTime.textContent || '';
+    loadmore.style.pointerEvents = '';
+  }
+}
+
+function updateMoreState(hasNext) {
+  const loadmore = getLastByClass('loadmore');
+  if (!loadmore) return;
+  if (!hasNext) {
+    loadmore.innerHTML = '<span>已经到底啦~</span>';
+    loadmore.style.pointerEvents = 'none';
+  }
+}
+
+async function appendMorePosts(trigger) {
+  const nextLinks = qsa('.next');
+  const nextLink = nextLinks.length > 0 ? nextLinks[nextLinks.length - 1] : null;
+  if (!(nextLink instanceof HTMLAnchorElement)) return;
+
+  trigger.style.pointerEvents = 'none';
+  trigger.textContent = '加载中~';
+
+  try {
+    const html = await fetchText(nextLink.href);
+    const fragment = parseHTML(html);
+    const nextBox = fragment.querySelector('#box');
+    const currentBox = byId('box');
+    if (!nextBox || !currentBox) return;
+
+    const rows = Array.from(nextBox.childNodes);
+    rows.forEach((row) => {
+      if (row.nodeType === 1) {
+        currentBox.appendChild(row);
+      }
+    });
+
+    trigger.innerHTML = '加载<span id="more"></span>的文章';
+    updateMoreTime();
+    updateMoreState(html.indexOf('class="next') > -1);
+    bindAll();
+  } catch (error) {
+    trigger.textContent = '加载失败，重试';
+    trigger.style.pointerEvents = '';
+    showTip(error instanceof Error ? error.message : '请求失败', false);
+  }
+}
+
+function bindLoadMorePosts() {
+  const more = byId('more');
+  if (!more) return;
+  const loadmore = getLastByClass('loadmore');
+  const lastTime = getLastByClass('time');
+  if (!loadmore || !lastTime) return;
+
+  loadmore.onclick = () => appendMorePosts(loadmore);
+  updateMoreTime();
+  updateMoreState(qsa('.next').length > 0);
+}
+
 function bindPopState() {
   window.onpopstate = (event) => {
     if (event.state?.html) {
@@ -1225,9 +1303,11 @@ function bindPopState() {
       state.pageHtml = event.state.html;
       state.pageTitle = event.state.title || document.title;
       state.pageUrl = event.state.url || window.location.href;
+      state.pageScrollY = event.state.scrollY || 0;
       main.innerHTML = event.state.html;
       document.title = event.state.title || document.title;
       bindAll();
+      window.scrollTo(0, state.pageScrollY || 0);
     } else {
       window.location.reload();
     }
@@ -1258,6 +1338,7 @@ function bindAll() {
   if (commentsButton) {
     commentsButton.classList.toggle('close', !(byId('post') && byId('response') && byId('pls')));
   }
+  bindLoadMorePosts();
   lazyLoadImages();
   enhanceArticleContent();
   enhanceCodeBlocks();
@@ -1281,5 +1362,5 @@ window.addEventListener('DOMContentLoaded', () => {
   rememberPage();
   bindAll();
   bindPopState();
-  history.replaceState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml }, state.pageTitle, state.pageUrl);
+  history.replaceState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml, scrollY: state.pageScrollY || 0 }, state.pageTitle, state.pageUrl);
 });

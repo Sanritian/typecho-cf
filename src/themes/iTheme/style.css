@@ -15,7 +15,7 @@ a:hover small{color:#777}
 blockquote{border-left:1px solid #e5e5e5;margin:0;padding:0 0 0 20px;font-style:italic}
 code{background:#f8f3e8;border-radius:2px;color:#5f4b1a;font-size:.8rem;margin:0 2px;padding:2px 5px}
 code,pre{font-family:Monaco,Bitstream Vera Sans Mono,Lucida Console,Terminal,Consolas,Liberation Mono,DejaVu Sans Mono,Courier New,monospace}
-pre{max-height:300px;padding:.75em;font-size:12px;line-height:20px;background:#fbf7ee;overflow:auto;border-radius:10px;scrollbar-width:thin;scrollbar-color:rgba(95,75,26,.12) transparent;border:1px solid rgba(95,75,26,.06)}
+pre{max-height:300px;padding:.75em;font-size:12px;line-height:20px;background:#fbf7ee;overflow:auto;border-radius:5px;scrollbar-width:thin;scrollbar-color:rgba(95,75,26,.12) transparent;border:1px solid rgba(95,75,26,.06)}
 pre>code{margin:0;padding:0;color:#3f3420;background:#fbf7ee}
 .code-block-wrap{position:relative;margin:0 0 20px}
 pre.code-block{position:relative;padding-top:.75em;padding-right:.75em}
