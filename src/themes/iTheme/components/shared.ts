@@ -13,6 +13,15 @@ export function stripHtml(input: string): string {
   return input.replace(/<[^>]+>/g, '');
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function formatTimeAgo(timestamp: number): string {
   const delta = Math.max(1, Math.floor(Date.now() / 1000) - timestamp);
   const chunks: Array<[number, string]> = [
@@ -66,13 +75,13 @@ export function parseDirectoryConfig(raw: unknown): Array<{ id: number; labelHtm
   if (typeof raw !== 'string' || !raw.trim()) return [];
 
   return raw
-    .split('；')
+    .split(/[；;]+/)
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
-      const parts = entry.split('，');
+      const parts = entry.split(/[，,]/);
       const id = parseInt(parts[0] || '0', 10);
-      const labelHtml = (parts[1] || '').trim();
+      const labelHtml = parts.slice(1).join('，').trim();
       return { id, labelHtml };
     })
     .filter((item) => item.id > 0 && item.labelHtml);
@@ -108,24 +117,48 @@ export function findCategoryNode(nodes: ThemeCategoryNode[], mid: number): Theme
   return null;
 }
 
-function renderCategoryChildren(nodes: ThemeCategoryNode[]): string {
-  if (nodes.length === 0) return '';
-  const html = nodes.map((node) => (
-    `<li><a href="${node.permalink}" class="item">${node.name}</a>${renderCategoryChildren(node.children)}</li>`
-  )).join('');
-  return `<em></em><ul>${html}</ul>`;
+function renderCategoryChildrenFlat(
+  categories: ThemeBaseProps['allCategories'],
+  parentId: number,
+): string {
+  let html = '';
+
+  for (const category of categories) {
+    if ((category.parent || 0) !== parentId) continue;
+    html += `<li><a href="${category.permalink}" class="item">${category.name}</a>`;
+    html += renderCategoryChildrenFlat(categories, category.mid);
+    html += '</li>';
+  }
+
+  return html ? `<em></em><ul>${html}</ul>` : '';
+}
+
+function normalizeDirectoryLabelHtml(labelHtml: string, fallbackHref: string): string {
+  if (/<[a-z][\s\S]*>/i.test(labelHtml)) {
+    return labelHtml;
+  }
+
+  return `<a href="${fallbackHref}" class="item directory-label">${escapeHtml(labelHtml)}</a>`;
+}
+
+function renderDirectoryEntry(
+  categories: ThemeBaseProps['allCategories'],
+  entry: { id: number; labelHtml: string },
+): string {
+  const currentCategory = categories.find((category) => category.mid === entry.id);
+  const labelHref = currentCategory?.permalink || 'javascript:void(0)';
+  return `<li>${normalizeDirectoryLabelHtml(entry.labelHtml, labelHref)}${renderCategoryChildrenFlat(categories, entry.id)}</li>`;
 }
 
 export function getDirectoryHtml(props: ThemeBaseProps): string {
   const config = parseDirectoryConfig(props.themeConfig.fl);
   if (config.length === 0) return '';
 
-  const tree = buildCategoryTree(props.allCategories);
-  return config.map((entry) => {
-    const node = findCategoryNode(tree, entry.id);
-    if (!node) return '';
-    return `<div><ul><li>${entry.labelHtml}${renderCategoryChildren(node.children)}</li></ul></div>`;
-  }).join('');
+  // 对齐原主题 getTree()：直接在扁平分类表上按 parent 递归，
+  // 并按 mid 升序遍历，避免被当前系统的分类排序字段影响显示顺序。
+  const categories = [...props.allCategories].sort((left, right) => left.mid - right.mid);
+  const entriesHtml = config.map((entry) => renderDirectoryEntry(categories, entry)).join('');
+  return `<div><ul><li><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul>${entriesHtml}</ul></li></ul></div>`;
 }
 
 export function getCommentCount(nodes: CommentNode[]): number {

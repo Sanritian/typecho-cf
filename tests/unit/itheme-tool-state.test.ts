@@ -2,7 +2,10 @@
  * iTheme 工具条 / TOC 纯状态逻辑测试。
  */
 import { describe, expect, it } from 'vitest';
-import { findActiveTocIndex, parseCommentCountText } from '@/themes/iTheme/assets/tool-state.js';
+import {
+  findActiveTocIndex,
+  parseCommentCountText,
+} from '@/themes/iTheme/assets/tool-state.js';
 
 describe('parseCommentCountText()', () => {
   it('能解析纯数字评论数', () => {

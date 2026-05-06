@@ -1314,13 +1314,35 @@ function syncToolButtons() {
   }
 }
 
+function toggleDirectoryItem(em) {
+  const currentList = em.nextElementSibling;
+  const parentList = em.parentElement?.parentElement;
+  if (!(currentList instanceof HTMLUListElement) || !(parentList instanceof HTMLUListElement)) return false;
+
+  Array.from(parentList.children).forEach((item) => {
+    if (!(item instanceof HTMLLIElement)) return;
+    Array.from(item.children).forEach((child) => {
+      if (child instanceof HTMLUListElement) {
+        child.className = child !== currentList ? '' : (currentList.className ? '' : 'off');
+      } else if (child instanceof HTMLElement && child.tagName === 'EM') {
+        child.className = child !== em ? '' : (em.className ? '' : 'off');
+      }
+    });
+  });
+
+  return false;
+}
+
 function bindDirectory() {
   qsa('#nav em').forEach((em) => {
-    em.onclick = () => {
-      const ul = em.parentElement?.querySelector('ul');
-      if (!ul) return;
-      ul.classList.toggle('off');
-      em.classList.toggle('off');
+    em.onclick = () => toggleDirectoryItem(em);
+  });
+
+  qsa('#nav a.directory-label[href="javascript:void(0)"]').forEach((link) => {
+    link.onclick = () => {
+      const em = link.parentElement?.querySelector(':scope > em');
+      if (!(em instanceof HTMLElement)) return false;
+      return toggleDirectoryItem(em);
     };
   });
 }
