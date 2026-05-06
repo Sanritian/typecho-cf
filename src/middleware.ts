@@ -149,10 +149,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const postPattern = options.permalinkPattern as string | undefined;
   const pagePattern = options.pagePattern as string | undefined;
   const categoryPattern = options.categoryPattern as string | undefined;
+  const postRegex =
+    postPattern && postPattern !== '/archives/{cid}/'
+      ? buildPermalinkRegex(postPattern)
+      : null;
+  const postMatch = postRegex ? path.match(postRegex) : null;
+  const builtInPageRoute = /^\/[^/]+\.html$/;
+  // 当文章自定义路径是 /{cid}.html 这类单段 .html 时，不能先被页面内建路由短路。
+  // 这里只在当前路径确实解析出 cid 时放行文章 rewrite，避免影响页面 rewrite 目标。
+  const allowPostRewriteOnBuiltInPageRoute =
+    builtInPageRoute.test(path) &&
+    !!postMatch?.groups?.cid;
 
   const builtInRoutes = [
     /^\/archives\/\d+\/?$/,       // post: /archives/{cid}/
-    /^\/[^/]+\.html$/,            // page: /{slug}.html
+    builtInPageRoute,             // page: /{slug}.html
     /^\/category\/[^/]+\/?$/,     // category: /category/{slug}/
     /^\/tag\//,
     /^\/author\//,
@@ -160,7 +171,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     /^\/$/,
   ];
 
-  const isBuiltInRoute = builtInRoutes.some((re) => re.test(path));
+  const isBuiltInRoute =
+    builtInRoutes.some((re) => re.test(path)) &&
+    !allowPostRewriteOnBuiltInPageRoute;
 
   if (
     !isBuiltInRoute &&
@@ -174,31 +187,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
       postPattern &&
       postPattern !== '/archives/{cid}/'
     ) {
-      const regex = buildPermalinkRegex(postPattern);
-      if (regex) {
-        const match = path.match(regex);
-        if (match?.groups) {
-          let cid: number | null = null;
+      if (postMatch?.groups) {
+        let cid: number | null = null;
 
-          if (match.groups.cid) {
-            cid = parseInt(match.groups.cid, 10);
-          } else if (match.groups.slug) {
-            const row = await db.query.contents.findFirst({
-              columns: { cid: true },
-              where: and(
-                eq(schema.contents.slug, match.groups.slug),
-                eq(schema.contents.type, 'post'),
-                eq(schema.contents.status, 'publish'),
-              ),
-            });
-            if (row) {
-              cid = row.cid;
-            }
+        if (postMatch.groups.cid) {
+          cid = parseInt(postMatch.groups.cid, 10);
+        } else if (postMatch.groups.slug) {
+          const row = await db.query.contents.findFirst({
+            columns: { cid: true },
+            where: and(
+              eq(schema.contents.slug, postMatch.groups.slug),
+              eq(schema.contents.type, 'post'),
+              eq(schema.contents.status, 'publish'),
+            ),
+          });
+          if (row) {
+            cid = row.cid;
           }
+        }
 
-          if (cid) {
-            return context.rewrite(`/archives/${cid}/`);
-          }
+        if (cid) {
+          return context.rewrite(`/archives/${cid}/`);
         }
       }
     }

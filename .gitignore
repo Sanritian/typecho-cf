@@ -10,3 +10,4 @@
 wrangler.toml
 /.claude
 /.env
+.ace-tool/

@@ -786,6 +786,12 @@ function openSidebar(open) {
   closeButton.classList.toggle('close', true);
 }
 
+function closeTransientUi() {
+  setSearchMode(false);
+  openSidebar(false);
+  clearTOC();
+}
+
 function lazyLoadImages() {
   const images = qsa('img[data-src]');
   if (!images.length) return;
@@ -1321,7 +1327,7 @@ function bindPopState() {
 }
 
 function bindAll() {
-  setSearchMode(false);
+  closeTransientUi();
   updateCommentTips();
   bindLinks();
   bindSearch();
@@ -1331,7 +1337,6 @@ function bindAll() {
   bindComments();
   bindThemeToggle();
   updateNavActiveState();
-  clearTOC();
   if (byId('post') || byId('page')) {
     createTOC();
     const closeButton = byId('Tclose');
