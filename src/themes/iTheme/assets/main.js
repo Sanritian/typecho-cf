@@ -1,3 +1,5 @@
+import { findActiveTocIndex, parseCommentCountText } from './tool-state.js';
+
 const state = {
   pageHtml: '',
   pageTitle: document.title,
@@ -14,6 +16,11 @@ const state = {
   activeNavHref: '',
   cache: new Map(),
   pending: null,
+  tocEntries: [],
+  tocMarkers: [],
+  tocActiveIndex: -1,
+  tocScrollHandler: null,
+  tocScrollFrame: 0,
 };
 
 const SMILES = [
@@ -397,16 +404,54 @@ function showTip(message, success) {
 }
 showTip._timer = 0;
 
+function getCurrentScrollY() {
+  return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
+
+function isCommentToolAvailable() {
+  const hasDetail = !!qs('#post, #page');
+  if (!hasDetail) return false;
+
+  return !!(byId('response') || byId('pls') || byId('comment-form') || qs('#comments .time'));
+}
+
+function getCommentCountText() {
+  const visibleCount = parseCommentCountText(byId('pls')?.textContent);
+  if (visibleCount !== null) return String(visibleCount);
+
+  const commentsLabel = parseCommentCountText(qs('#comments .time')?.textContent);
+  if (commentsLabel !== null) return String(commentsLabel);
+
+  return '0';
+}
+
+function updateDetailCacheCommentCount() {
+  const count = getCommentCountText();
+  const cacheKey = normalizeUrl(window.location.href.split('#')[0]);
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (!cached) return;
+    const next = cached.replace(/(<span id="pls">)\d+(<\/span>)/, `$1${count}$2`);
+    sessionStorage.setItem(cacheKey, next);
+  } catch {}
+}
+
 function updateCommentTips() {
   const tips = byId('tips');
-  const pls = byId('pls');
-  if (!tips || !pls) return;
-  const count = pls.textContent?.trim() || '0';
+  if (!tips) return;
+
+  if (!isCommentToolAvailable()) {
+    tips.textContent = '0';
+    tips.style.display = 'none';
+    return;
+  }
+
+  const count = getCommentCountText();
   if (count === '0') {
     tips.style.display = 'none';
   } else {
     tips.textContent = count;
-    tips.style.display = '';
+    tips.style.display = 'block';
   }
 }
 
@@ -420,7 +465,7 @@ function rememberPage() {
   state.pageHtml = main.innerHTML;
   state.pageTitle = document.title;
   state.pageUrl = window.location.href;
-  state.pageScrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  state.pageScrollY = getCurrentScrollY();
   if (!isDetailPage()) {
     state.returnHtml = state.pageHtml;
     state.returnTitle = state.pageTitle;
@@ -428,7 +473,10 @@ function rememberPage() {
     state.returnScrollY = state.pageScrollY;
   }
   try {
-    sessionStorage.setItem(normalizeUrl(window.location.href), state.pageHtml);
+    // 对齐原主题：评论异步加载后的 DOM 不写回页面缓存，避免切文章后仍保持“已加载评论”状态。
+    if (!byId('comments')) {
+      sessionStorage.setItem(normalizeUrl(window.location.href), state.pageHtml);
+    }
   } catch {}
 }
 
@@ -485,7 +533,7 @@ function updateHistory(url, title, html, replace = false) {
     title,
     url,
     html,
-    scrollY: window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0,
+    scrollY: getCurrentScrollY(),
   };
   if (replace) {
     history.replaceState(data, title, url);
@@ -725,8 +773,8 @@ function createTOC() {
     heading.parentNode?.insertBefore(marker, heading);
     marker.appendChild(heading);
     return `
-      <div class="TOCLevel${level}">
-        <a class="TOCEntry" nohover onclick="scrollt('${anchorId}'); return false;" href="#${anchorId}">
+      <div class="TOCEntry TOCLevel${level}">
+        <a nohover onclick="scrollt('${anchorId}'); return false;" href="#${anchorId}">
           <span class="TOCSectNum">${sect}</span>${escapeHtml(heading.textContent || '')}
         </a>
       </div>
@@ -735,6 +783,18 @@ function createTOC() {
 
   host.innerHTML = html;
   toc.appendChild(host);
+  state.tocMarkers = qsa('.Toclist', byId('main') || document);
+  state.tocEntries = qsa('.TOCEntry', host);
+  state.tocActiveIndex = -1;
+  state.tocScrollHandler = () => {
+    if (state.tocScrollFrame) return;
+    state.tocScrollFrame = window.requestAnimationFrame(() => {
+      state.tocScrollFrame = 0;
+      syncTocActiveEntry();
+    });
+  };
+  window.addEventListener('scroll', state.tocScrollHandler, { passive: true });
+  syncTocActiveEntry();
   window.setTimeout(() => {
     if (!byId('TOC')) return;
     toc.style.display = 'block';
@@ -750,13 +810,51 @@ function createTOC() {
   }, 500);
 }
 
+function clearTocTracking() {
+  if (state.tocScrollHandler) {
+    window.removeEventListener('scroll', state.tocScrollHandler);
+  }
+  if (state.tocScrollFrame) {
+    window.cancelAnimationFrame(state.tocScrollFrame);
+  }
+  state.tocEntries = [];
+  state.tocMarkers = [];
+  state.tocActiveIndex = -1;
+  state.tocScrollHandler = null;
+  state.tocScrollFrame = 0;
+}
+
+function setActiveTocEntry(nextIndex) {
+  if (state.tocActiveIndex === nextIndex) return;
+  state.tocActiveIndex = nextIndex;
+  state.tocEntries.forEach((entry, index) => {
+    entry.classList.toggle('is-active', index === nextIndex);
+  });
+
+  if (nextIndex >= 0 && state.tocOpen && state.tocEntries[nextIndex]) {
+    state.tocEntries[nextIndex].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function syncTocActiveEntry() {
+  if (!state.tocMarkers.length || !state.tocEntries.length) {
+    setActiveTocEntry(-1);
+    return;
+  }
+
+  const markerTops = state.tocMarkers.map((marker) => marker.getBoundingClientRect().top + getCurrentScrollY());
+  const activeIndex = findActiveTocIndex(markerTops, getCurrentScrollY());
+  setActiveTocEntry(activeIndex);
+}
+
 function clearTOC() {
+  clearTocTracking();
   const toc = byId('TOC');
+  state.tocOpen = false;
   if (!toc) return;
   toc.className = '';
   toc.style.display = 'none';
   toc.innerHTML = '';
-  state.tocOpen = false;
 }
 
 function toggleTOC(force) {
@@ -770,6 +868,9 @@ function toggleTOC(force) {
   const closeButton = byId('Tclose');
   if (tocClose && sidebar?.children[0] && closeButton?.children[0]) {
     tocClose.innerHTML = next ? closeButton.children[0].innerHTML : sidebar.children[0].innerHTML;
+  }
+  if (next) {
+    syncTocActiveEntry();
   }
 }
 
@@ -895,6 +996,7 @@ function showCommentLoading() {
 }
 
 async function loadCommentFragment(url) {
+  const hadComments = !!byId('comments');
   showCommentLoading();
   const html = await fetchText(url.includes('?') ? `${url}&c=a` : `${url}?c=a`);
   const fragment = parseHTML(html);
@@ -910,9 +1012,13 @@ async function loadCommentFragment(url) {
   }
   removeCommentLoading();
   updateCommentTips();
+  updateDetailCacheCommentCount();
   bindCommentPager();
   bindComments();
   ensureSmileBox();
+  if (!hadComments && byId('comments')) {
+    showTip('评论加载完成', true);
+  }
 }
 
 async function submitComment(event) {
@@ -960,6 +1066,7 @@ async function submitComment(event) {
       pls.textContent = String(count);
     }
     updateCommentTips();
+    updateDetailCacheCommentCount();
     showTip('寄出成功！', true);
   } catch (error) {
     showTip(error instanceof Error ? error.message : '提交失败', false);
@@ -1172,17 +1279,8 @@ function bindToolButtons() {
 
   const commentsButton = byId('Tcomments');
   if (commentsButton) {
-    commentsButton.onclick = async () => {
-      const comments = byId('comments');
-      if (comments) {
-        comments.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else if (qs('#post, #page')) {
-        await loadCommentFragment(window.location.href.split('#')[0]);
-        const nextComments = byId('comments');
-        if (nextComments) nextComments.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        return false;
-      }
+    commentsButton.onclick = () => {
+      window.commentlist();
       return false;
     };
   }
@@ -1201,6 +1299,18 @@ function bindToolButtons() {
       }
       return false;
     };
+  }
+}
+
+function syncToolButtons() {
+  const closeButton = byId('Tclose');
+  if (closeButton) {
+    closeButton.classList.toggle('close', !state.returnHtml || !isDetailPage());
+  }
+
+  const commentsButton = byId('Tcomments');
+  if (commentsButton) {
+    commentsButton.classList.toggle('close', !isCommentToolAvailable());
   }
 }
 
@@ -1339,17 +1449,10 @@ function bindAll() {
   updateNavActiveState();
   if (byId('post') || byId('page')) {
     createTOC();
-    const closeButton = byId('Tclose');
-    if (closeButton) closeButton.classList.toggle('close', !state.returnHtml);
   } else {
-    const closeButton = byId('Tclose');
-    if (closeButton) closeButton.classList.add('close');
     rememberPage();
   }
-  const commentsButton = byId('Tcomments');
-  if (commentsButton) {
-    commentsButton.classList.toggle('close', !(byId('post') && byId('response') && byId('pls')));
-  }
+  syncToolButtons();
   bindLoadMorePosts();
   lazyLoadImages();
   enhanceArticleContent();
@@ -1365,6 +1468,18 @@ window.commentlist = function commentlist() {
   const comments = byId('comments');
   if (comments) {
     comments.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  if (qs('#post, #page')) {
+    loadCommentFragment(window.location.href.split('#')[0]).then(() => {
+      const nextComments = byId('comments');
+      if (nextComments) {
+        nextComments.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }).catch((error) => {
+      showTip(error instanceof Error ? error.message : '评论加载失败', false);
+    });
   }
 };
 

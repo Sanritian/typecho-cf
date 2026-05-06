@@ -523,7 +523,7 @@ export async function preparePostData(
 
   // Generate CSRF token for comment form (empty when anti-spam is disabled)
   const securityToken = options.commentsAntiSpam
-    ? await generateCommentToken(options.secret as string, requestUrl)
+    ? await generateCommentToken(options.secret as string, permalink)
     : '';
 
   return {
@@ -610,7 +610,7 @@ export async function preparePageData(
 
   // Generate CSRF token for comment form (empty when anti-spam is disabled)
   const securityToken = options.commentsAntiSpam
-    ? await generateCommentToken(options.secret as string, requestUrl)
+    ? await generateCommentToken(options.secret as string, permalink)
     : '';
 
   return {

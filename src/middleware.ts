@@ -50,6 +50,20 @@ function buildPermalinkRegex(pattern: string): RegExp | null {
   }
 }
 
+function normalizeRewritePath(pathname: string): string {
+  if (!pathname || pathname === '/') return '/';
+  if (pathname.endsWith('/')) return pathname;
+  // 文件型链接（如 /123.html）不能强行补斜杠，否则后续 permalink 匹配会失效。
+  if (/\.[^/]+$/.test(pathname)) return pathname;
+  return `${pathname}/`;
+}
+
+function buildRewriteUrl(requestUrl: string, pathname: string): URL {
+  const rewrittenUrl = new URL(requestUrl);
+  rewrittenUrl.pathname = normalizeRewritePath(pathname);
+  return rewrittenUrl;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const url = new URL(context.request.url);
   const path = url.pathname;
@@ -73,7 +87,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const basePath = paginationMatch[1] || '';
     const pageNum = parseInt(paginationMatch[2], 10);
     (context.locals as any)._page = pageNum;
-    return context.rewrite(basePath === '' ? '/' : basePath + '/');
+    return context.rewrite(buildRewriteUrl(context.request.url, basePath));
   }
 
   // 评论分页 URL 重写
@@ -84,8 +98,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const pageNum = parseInt(commentPaginationMatch[2], 10);
     (context.locals as any)._commentPage = pageNum;
 
-    const rewrittenUrl = new URL(context.request.url);
-    rewrittenUrl.pathname = basePath === '' ? '/' : `${basePath}/`;
+    const rewrittenUrl = buildRewriteUrl(context.request.url, basePath);
     rewrittenUrl.searchParams.set('commentPage', String(pageNum));
     return context.rewrite(rewrittenUrl);
   }
@@ -207,7 +220,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
 
         if (cid) {
-          return context.rewrite(`/archives/${cid}/`);
+          return context.rewrite(buildRewriteUrl(context.request.url, `/archives/${cid}/`));
         }
       }
     }
@@ -239,7 +252,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
           }
 
           if (slug) {
-            return context.rewrite(`/${slug}.html`);
+            return context.rewrite(buildRewriteUrl(context.request.url, `/${slug}.html`));
           }
         }
       }
@@ -272,7 +285,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
           }
 
           if (slug) {
-            return context.rewrite(`/category/${slug}/`);
+            return context.rewrite(buildRewriteUrl(context.request.url, `/category/${slug}/`));
           }
         }
       }

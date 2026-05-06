@@ -67,6 +67,18 @@ function makeContext(pathname: string) {
   };
 }
 
+function expectRewriteTarget(rewrite: ReturnType<typeof vi.fn>, expectedPathname: string, expectedSearch = '') {
+  expect(rewrite).toHaveBeenCalledTimes(1);
+  const [target] = rewrite.mock.calls[0];
+  if (typeof target === 'string') {
+    expect(target).toBe(`${expectedPathname}${expectedSearch}`);
+    return;
+  }
+
+  expect(target.pathname).toBe(expectedPathname);
+  expect(target.search).toBe(expectedSearch);
+}
+
 function mockInstalledOptions(overrides: Record<string, unknown> = {}) {
   mockLoadOptions.mockResolvedValue({
     installed: true,
@@ -96,7 +108,17 @@ describe('middleware permalink rewrite', () => {
 
     await onRequest(context as any, next as any);
 
-    expect(context.rewrite).toHaveBeenCalledWith('/archives/123/');
+    expectRewriteTarget(context.rewrite, '/archives/123/');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('文章评论片段请求 rewrite 时会保留 c 查询参数', async () => {
+    const { onRequest } = await import('@/middleware');
+    const { context, next } = makeContext('/123.html?c=a');
+
+    await onRequest(context as any, next as any);
+
+    expectRewriteTarget(context.rewrite, '/archives/123/', '?c=a');
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -116,7 +138,17 @@ describe('middleware permalink rewrite', () => {
 
     await onRequest(context as any, next as any);
 
-    expect(context.rewrite).toHaveBeenCalledWith('/category/notes/');
+    expectRewriteTarget(context.rewrite, '/category/notes/');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('文件型永久链接的评论分页 rewrite 不会额外补斜杠', async () => {
+    const { onRequest } = await import('@/middleware');
+    const { context, next } = makeContext('/123.html/comment-page-2/');
+
+    await onRequest(context as any, next as any);
+
+    expectRewriteTarget(context.rewrite, '/123.html', '?commentPage=2');
     expect(next).not.toHaveBeenCalled();
   });
 });
