@@ -6,6 +6,7 @@ import Comments from './Comments.astro';
 type Props = ThemePageProps;
 const props = Astro.props;
 const isCommentFragment = props.renderMode === 'comment';
+const isLinksPage = props.page.template === 'links' || props.page.slug === 'links';
 ---
 <Layout {...props} pageTitle={`${props.page.title} - ${props.options.title}`}>
   {isCommentFragment ? (
@@ -20,8 +21,8 @@ const isCommentFragment = props.renderMode === 'comment';
     />
   ) : (
     <>
-      <h1 id="page">{props.page.title}</h1>
-      <article set:html={props.page.content}></article>
+      {!isLinksPage && <h1 id="page">{props.page.title}</h1>}
+      <article class:list={[{ 'links-page': isLinksPage }]} set:html={props.page.content}></article>
     </>
   )}
 </Layout>

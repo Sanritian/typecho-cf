@@ -621,6 +621,7 @@ export async function preparePageData(
       slug: cleanSlug,
       permalink,
       content: renderedContent,
+      template: pageRow.template || null,
       created: pageRow.created || 0,
       allowComment,
       hasPassword,

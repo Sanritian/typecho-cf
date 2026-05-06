@@ -7,7 +7,7 @@
  * constructs that span the boundary are resolved correctly.
  */
 import { describe, it, expect } from 'vitest';
-import { renderMarkdown, renderContentExcerpt, generateExcerpt } from '@/lib/markdown';
+import { renderMarkdown, renderContentExcerpt, generateExcerpt, renderMarkdownFiltered } from '@/lib/markdown';
 
 // ---------------------------------------------------------------------------
 // renderMarkdown
@@ -37,6 +37,33 @@ describe('renderMarkdown', () => {
     const src = 'See [link][foo]<!--more-->\n\n[foo]: https://example.com';
     const html = renderMarkdown(src);
     expect(html).toContain('href="https://example.com"');
+  });
+});
+
+describe('renderMarkdownFiltered spacing', () => {
+  it('inserts spaces between Chinese and English text in normal content', async () => {
+    const html = await renderMarkdownFiltered('这是OpenAI测试ABC中文');
+    expect(html).toContain('这是 OpenAI 测试 ABC 中文');
+  });
+
+  it('does not alter code block text when inserting spacing', async () => {
+    const html = await renderMarkdownFiltered('```txt\n中文OpenAI测试\n```');
+    expect(html).toContain('中文OpenAI测试');
+    expect(html).not.toContain('中文 OpenAI 测试');
+  });
+
+  it('rewrites external links to open in a new window', async () => {
+    const html = await renderMarkdownFiltered('[OpenAI](https://openai.com)');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it('rewrites images into wrapped lazyload markup', async () => {
+    const html = await renderMarkdownFiltered('![alt](/usr/uploads/demo.png)');
+    expect(html).toContain('<div style="max-width:100%;display:inline-block;background:rgb(181, 191, 194) none repeat scroll 0% 0%;border-radius:5px">');
+    expect(html).toContain('class="ani"');
+    expect(html).toContain('data-src="/usr/uploads/demo.png"');
+    expect(html).not.toMatch(/<img[^>]+\ssrc="/);
   });
 });
 

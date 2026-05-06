@@ -53,6 +53,87 @@ function stripMarkdownPrefix(text: string): string {
   return text.startsWith('<!--markdown-->') ? text.slice('<!--markdown-->'.length) : text;
 }
 
+function insertSpacingInText(text: string): string {
+  return text
+    .replace(/([\u4e00-\u9fa5]+)([A-Za-z0-9_]+)/gu, '$1 $2')
+    .replace(/([A-Za-z0-9_]+)([\u4e00-\u9fa5]+)/gu, '$1 $2');
+}
+
+function insertSpacingInHtml(html: string): string {
+  const skipTags = new Set(['pre', 'code', 'script', 'style', 'textarea']);
+  const parts = html.split(/(<[^>]+>)/g);
+  const stack: string[] = [];
+
+  return parts.map((part) => {
+    if (!part) return part;
+
+    if (part.startsWith('<')) {
+      const tagMatch = part.match(/^<\s*(\/)?\s*([a-zA-Z0-9-]+)/);
+      if (!tagMatch) return part;
+
+      const isClosing = !!tagMatch[1];
+      const tagName = tagMatch[2].toLowerCase();
+      const isSelfClosing = /\/\s*>$/.test(part) || /^<\s*!(?:--|doctype|\[CDATA\[)/i.test(part);
+
+      if (skipTags.has(tagName)) {
+        if (isClosing) {
+          for (let idx = stack.length - 1; idx >= 0; idx -= 1) {
+            if (stack[idx] === tagName) {
+              stack.splice(idx, 1);
+              break;
+            }
+          }
+        } else if (!isSelfClosing) {
+          stack.push(tagName);
+        }
+      }
+
+      return part;
+    }
+
+    if (stack.length > 0) {
+      return part;
+    }
+
+    return insertSpacingInText(part);
+  }).join('');
+}
+
+function rewriteContentHtml(html: string): string {
+  let output = html;
+
+  output = output.replace(/<a([^>]*?)href="([^"]+)"([^>]*)>/g, (match, before, href, after) => {
+    if (!/^https?:\/\//i.test(href)) return match;
+
+    let attrs = `${before}${after}`;
+    if (/target="/i.test(attrs)) return `<a href="${href}"${attrs}>`;
+
+    if (/rel="/i.test(attrs)) {
+      attrs = attrs.replace(/rel="([^"]*)"/i, (_m, rel) => `rel="${rel} noopener noreferrer"`);
+    } else {
+      attrs += ' rel="noopener noreferrer"';
+    }
+
+    return `<a href="${href}"${attrs} target="_blank">`;
+  });
+
+  output = output.replace(/<img([^>]*?)src="([^"]+)"([^>]*)>/g, (_match, before, src, after) => {
+    let attrs = `${before}${after}`;
+    attrs = attrs.replace(/\s*\/\s*$/, '');
+    if (/class="/i.test(attrs)) {
+      attrs = attrs.replace(/class="([^"]*)"/i, (_m, value) => `class="${value} ani"`);
+    } else {
+      attrs = ` class="ani"${attrs}`;
+    }
+
+    return `<div style="max-width:100%;display:inline-block;background:rgb(181, 191, 194) none repeat scroll 0% 0%;border-radius:5px"><img data-src="${src}"${attrs}></div>`;
+  });
+
+  output = output.replace(/<p>\s*(<div style="max-width:100%;display:inline-block;background:rgb\(181, 191, 194\) none repeat scroll 0% 0%;border-radius:5px">[\s\S]*?<\/div>)\s*<\/p>/g, '$1');
+
+  return output;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -86,7 +167,9 @@ export async function renderMarkdownFiltered(text: string): Promise<string> {
   // Apply content:content filter — plugins can modify the rendered HTML
   sanitized = await applyFilter('content:content', sanitized);
 
-  return sanitized;
+  sanitized = rewriteContentHtml(sanitized);
+
+  return insertSpacingInHtml(sanitized);
 }
 
 /**

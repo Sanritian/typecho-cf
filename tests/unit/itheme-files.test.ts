@@ -17,6 +17,16 @@ describe('iTheme files', () => {
     expect(source).not.toContain('"s"');
   });
 
+  it('supports links page rendering in page component', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/themes/iTheme/components/Page.astro'),
+      'utf-8',
+    );
+
+    expect(source).toContain("props.page.template === 'links'");
+    expect(source).toContain('links-page');
+  });
+
   it('ships a dedicated client script', () => {
     const source = readFileSync(
       join(process.cwd(), 'src/themes/iTheme/assets/main.js'),
@@ -27,5 +37,21 @@ describe('iTheme files', () => {
     expect(source).toContain('loadCommentFragment');
     expect(source).toContain('navigate(');
     expect(source).toContain('buildSearchResults');
+  });
+
+  it('converts uploaded images to avif in admin editors when supported', () => {
+    const postSource = readFileSync(
+      join(process.cwd(), 'src/pages/admin/write-post.astro'),
+      'utf-8',
+    );
+    const pageSource = readFileSync(
+      join(process.cwd(), 'src/pages/admin/write-page.astro'),
+      'utf-8',
+    );
+
+    expect(postSource).toContain('convertImageToAvif');
+    expect(postSource).toContain("image/avif");
+    expect(pageSource).toContain('convertImageToAvif');
+    expect(pageSource).toContain("image/avif");
   });
 });

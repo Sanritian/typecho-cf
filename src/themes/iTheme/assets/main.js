@@ -3,6 +3,10 @@ const state = {
   pageTitle: document.title,
   pageUrl: window.location.href,
   pageScrollY: 0,
+  returnHtml: '',
+  returnTitle: '',
+  returnUrl: '',
+  returnScrollY: 0,
   searchOpen: false,
   searchIndex: -1,
   tocOpen: false,
@@ -94,6 +98,10 @@ function qs(selector, root = document) {
 
 function qsa(selector, root = document) {
   return Array.from(root.querySelectorAll(selector));
+}
+
+function isDetailPage(root = document) {
+  return !!(root.getElementById('post') || root.getElementById('page'));
 }
 
 function isAjaxRequest() {
@@ -413,6 +421,12 @@ function rememberPage() {
   state.pageTitle = document.title;
   state.pageUrl = window.location.href;
   state.pageScrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  if (!isDetailPage()) {
+    state.returnHtml = state.pageHtml;
+    state.returnTitle = state.pageTitle;
+    state.returnUrl = state.pageUrl;
+    state.returnScrollY = state.pageScrollY;
+  }
   try {
     sessionStorage.setItem(normalizeUrl(window.location.href), state.pageHtml);
   } catch {}
@@ -969,17 +983,9 @@ async function renderPage(url, html, { replaceHistory = false } = {}) {
   if (!main) return;
 
   const mainHtml = extractMainHtml(html);
-  const previousHtml = state.pageHtml;
-  const previousTitle = state.pageTitle;
-  const previousUrl = state.pageUrl;
-  const previousScrollY = state.pageScrollY;
   main.innerHTML = mainHtml;
   setSearchMode(false);
   document.title = extractTitle(html);
-  state.pageUrl = previousUrl;
-  state.pageHtml = previousHtml;
-  state.pageTitle = previousTitle;
-  state.pageScrollY = previousScrollY;
   if (replaceHistory) {
     updateHistory(url, document.title, main.innerHTML, true);
   } else {
@@ -1179,13 +1185,13 @@ function bindToolButtons() {
   if (closeButton) {
     closeButton.onclick = () => {
       const main = byId('main');
-      if (main && state.pageHtml) {
-        main.innerHTML = state.pageHtml;
-        document.title = state.pageTitle;
-        window.scrollTo(0, state.pageScrollY || 0);
+      if (main && state.returnHtml) {
+        main.innerHTML = state.returnHtml;
+        document.title = state.returnTitle;
+        window.scrollTo(0, state.returnScrollY || 0);
         bindAll();
-        history.pushState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml, scrollY: state.pageScrollY || 0 }, state.pageTitle, state.pageUrl);
-        history.replaceState({ title: state.pageTitle, url: state.pageUrl, html: state.pageHtml, scrollY: state.pageScrollY || 0 }, state.pageTitle, state.pageUrl);
+        history.pushState({ title: state.returnTitle, url: state.returnUrl, html: state.returnHtml, scrollY: state.returnScrollY || 0 }, state.returnTitle, state.returnUrl);
+        history.replaceState({ title: state.returnTitle, url: state.returnUrl, html: state.returnHtml, scrollY: state.returnScrollY || 0 }, state.returnTitle, state.returnUrl);
       }
       return false;
     };
@@ -1329,10 +1335,11 @@ function bindAll() {
   if (byId('post') || byId('page')) {
     createTOC();
     const closeButton = byId('Tclose');
-    if (closeButton) closeButton.classList.remove('close');
+    if (closeButton) closeButton.classList.toggle('close', !state.returnHtml);
   } else {
     const closeButton = byId('Tclose');
     if (closeButton) closeButton.classList.add('close');
+    rememberPage();
   }
   const commentsButton = byId('Tcomments');
   if (commentsButton) {

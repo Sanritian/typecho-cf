@@ -100,6 +100,7 @@ export interface ThemePageProps extends ThemeBaseProps {
     permalink: string;
     /** Rendered HTML content */
     content: string;
+    template: string | null;
     created: number;
     allowComment: boolean;
     hasPassword: boolean;
