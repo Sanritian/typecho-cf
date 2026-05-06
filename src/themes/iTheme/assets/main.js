@@ -42,6 +42,47 @@ const SMILES = [
   '´_ゝ｀',
 ];
 
+const CODE_LANGUAGE_ALIASES = {
+  javascript: 'js',
+  js: 'js',
+  typescript: 'ts',
+  ts: 'ts',
+  jsx: 'jsx',
+  tsx: 'tsx',
+  json: 'json',
+  bash: 'bash',
+  sh: 'bash',
+  shell: 'bash',
+  zsh: 'bash',
+  html: 'html',
+  xml: 'html',
+  markup: 'html',
+  css: 'css',
+  scss: 'css',
+  less: 'css',
+  php: 'php',
+  yaml: 'yaml',
+  yml: 'yaml',
+  diff: 'diff',
+  plaintext: 'text',
+  text: 'text',
+};
+
+const CODE_LANGUAGE_LABELS = {
+  js: 'JS',
+  ts: 'TS',
+  jsx: 'JSX',
+  tsx: 'TSX',
+  json: 'JSON',
+  bash: 'BASH',
+  html: 'HTML',
+  css: 'CSS',
+  php: 'PHP',
+  yaml: 'YAML',
+  diff: 'DIFF',
+  text: 'TEXT',
+};
+
 function byId(id) {
   return document.getElementById(id);
 }
@@ -77,10 +118,244 @@ function decodeHtml(text) {
   return div.textContent || '';
 }
 
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      resolve();
+    } catch (error) {
+      reject(error);
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  });
+}
+
 function parseHTML(html) {
   const tpl = document.createElement('template');
   tpl.innerHTML = html.trim();
   return tpl.content;
+}
+
+function normalizeCodeLanguage(name) {
+  if (!name) return '';
+  const normalized = name.toLowerCase().replace(/^language-/, '').replace(/^lang-/, '');
+  return CODE_LANGUAGE_ALIASES[normalized] || normalized;
+}
+
+function getCodeLanguage(code) {
+  const classes = code.className.split(/\s+/).filter(Boolean);
+  for (const className of classes) {
+    const normalized = normalizeCodeLanguage(className);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function getCodeLanguageLabel(language) {
+  return CODE_LANGUAGE_LABELS[language] || language.toUpperCase();
+}
+
+function applyTokenRules(raw, registerRules) {
+  let source = raw;
+  const tokens = [];
+
+  const stash = (pattern, className, formatter) => {
+    source = source.replace(pattern, (...args) => {
+      const match = args[0];
+      const tokenHtml = formatter
+        ? formatter(...args)
+        : `<span class="code-${className}">${escapeHtml(match)}</span>`;
+      const placeholder = `%%CODETOKEN${tokens.length}%%`;
+      tokens.push(tokenHtml);
+      return placeholder;
+    });
+  };
+
+  registerRules(stash);
+
+  return escapeHtml(source).replace(/%%CODETOKEN(\d+)%%/g, (_, index) => tokens[Number(index)] || '');
+}
+
+function highlightMarkup(raw) {
+  let escaped = escapeHtml(raw);
+  escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="code-comment">$1</span>');
+  escaped = escaped.replace(/(&lt;\/?)([\w:-]+)/g, '$1<span class="code-tag">$2</span>');
+  escaped = escaped.replace(/([\w:-]+)(=)(&quot;.*?&quot;|&#39;.*?&#39;)/g, '<span class="code-attr">$1</span><span class="code-punctuation">$2</span><span class="code-string">$3</span>');
+  return escaped;
+}
+
+function highlightCss(raw) {
+  return applyTokenRules(raw, (stash) => {
+    stash(/\/\*[\s\S]*?\*\//g, 'comment');
+    stash(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, 'string');
+    stash(/(^|[\s{;])(@[\w-]+)/gm, 'keyword', (_, prefix, atRule) => `${escapeHtml(prefix)}<span class="code-keyword">${escapeHtml(atRule)}</span>`);
+    stash(/(^|[;{]\s*)([\w-]+)(?=\s*:)/gm, 'property', (_, prefix, prop) => `${escapeHtml(prefix)}<span class="code-property">${escapeHtml(prop)}</span>`);
+    stash(/#[\da-fA-F]{3,8}\b/g, 'number');
+    stash(/\b\d+(?:\.\d+)?(?:px|em|rem|vh|vw|%|ms|s|deg)?\b/g, 'number');
+  });
+}
+
+function highlightJson(raw) {
+  return applyTokenRules(raw, (stash) => {
+    stash(/"(?:\\.|[^"\\])*"(?=\s*:)/g, 'property');
+    stash(/"(?:\\.|[^"\\])*"/g, 'string');
+    stash(/\b(?:true|false|null)\b/g, 'keyword');
+    stash(/\b-?\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/gi, 'number');
+  });
+}
+
+function highlightDiff(raw) {
+  return applyTokenRules(raw, (stash) => {
+    stash(/^\+.*$/gm, 'string');
+    stash(/^-.*$/gm, 'comment');
+    stash(/^@@.*$/gm, 'keyword');
+  });
+}
+
+function highlightScriptLike(raw, options = {}) {
+  const {
+    keywords = [],
+    builtins = [],
+    variables = false,
+  } = options;
+
+  const keywordPattern = keywords.length > 0
+    ? new RegExp(`\\b(?:${keywords.join('|')})\\b`, 'g')
+    : null;
+  const builtinPattern = builtins.length > 0
+    ? new RegExp(`\\b(?:${builtins.join('|')})\\b`, 'g')
+    : null;
+
+  return applyTokenRules(raw, (stash) => {
+    stash(/`(?:\\[\s\S]|[^`])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, 'string');
+    stash(/\/\*[\s\S]*?\*\/|\/\/[^\n\r]*/g, 'comment');
+    if (variables) {
+      stash(/\$[A-Za-z_][\w]*/g, 'builtin');
+    }
+    stash(/\b(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)\b/g, 'number');
+    if (keywordPattern) stash(keywordPattern, 'keyword');
+    if (builtinPattern) stash(builtinPattern, 'builtin');
+  });
+}
+
+function highlightCode(raw, language) {
+  switch (language) {
+    case 'html':
+      return highlightMarkup(raw);
+    case 'css':
+      return highlightCss(raw);
+    case 'json':
+      return highlightJson(raw);
+    case 'diff':
+      return highlightDiff(raw);
+    case 'bash':
+      return highlightScriptLike(raw, {
+        keywords: ['if', 'then', 'else', 'fi', 'for', 'in', 'do', 'done', 'case', 'esac', 'while', 'function', 'echo', 'export', 'local', 'return', 'cd', 'ls', 'cat', 'grep', 'sed', 'awk', 'find', 'xargs', 'git', 'pnpm', 'npm'],
+        variables: true,
+      });
+    case 'php':
+      return highlightScriptLike(raw, {
+        keywords: ['function', 'return', 'if', 'else', 'elseif', 'foreach', 'for', 'while', 'switch', 'case', 'break', 'continue', 'try', 'catch', 'finally', 'throw', 'new', 'class', 'extends', 'public', 'protected', 'private', 'static', 'echo', 'null', 'true', 'false'],
+        builtins: ['array', 'json_encode', 'json_decode', 'count', 'isset', 'empty', 'require', 'include'],
+        variables: true,
+      });
+    case 'js':
+    case 'jsx':
+    case 'ts':
+    case 'tsx':
+      return highlightScriptLike(raw, {
+        keywords: ['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'try', 'catch', 'finally', 'throw', 'new', 'class', 'extends', 'import', 'from', 'export', 'default', 'await', 'async', 'null', 'true', 'false', 'undefined', 'typeof', 'instanceof', 'in', 'of'],
+        builtins: ['console', 'window', 'document', 'Math', 'JSON', 'Array', 'Object', 'Promise', 'Set', 'Map', 'Date', 'RegExp'],
+      });
+    case 'yaml':
+      return applyTokenRules(raw, (stash) => {
+        stash(/#.*$/gm, 'comment');
+        stash(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, 'string');
+        stash(/(^|\s)([\w-]+)(?=:\s)/gm, 'property', (_, prefix, prop) => `${escapeHtml(prefix)}<span class="code-property">${escapeHtml(prop)}</span>`);
+        stash(/\b(?:true|false|null)\b/g, 'keyword');
+        stash(/\b-?\d+(?:\.\d+)?\b/g, 'number');
+      });
+    default:
+      return escapeHtml(raw);
+  }
+}
+
+function enhanceCodeBlocks() {
+  qsa('pre > code').forEach((code) => {
+    const pre = code.parentElement;
+    if (!pre || pre.dataset.codeEnhanced === '1') return;
+
+    const language = getCodeLanguage(code);
+    const raw = code.textContent || '';
+
+    pre.dataset.codeEnhanced = '1';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrap';
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
+    pre.classList.add('code-block');
+    if (language) {
+      pre.dataset.language = language;
+    }
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'code-copy';
+    copy.setAttribute('aria-label', '复制代码');
+    copy.setAttribute('title', '复制代码');
+    copy.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 9h9v11H9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"></path><path d="M6 4h9v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path><path d="M6 4v11h2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+
+    const feedback = document.createElement('span');
+    feedback.className = 'code-copy-feedback';
+    feedback.setAttribute('aria-hidden', 'true');
+
+    copy.onclick = async () => {
+      try {
+        await copyText(raw);
+        copy.classList.remove('is-failed');
+        copy.classList.add('is-copied');
+        copy.setAttribute('title', '已复制');
+        copy.setAttribute('aria-label', '已复制');
+        feedback.textContent = '已复制';
+        feedback.classList.add('is-visible');
+        window.setTimeout(() => {
+          copy.setAttribute('title', '复制代码');
+          copy.setAttribute('aria-label', '复制代码');
+          copy.classList.remove('is-copied');
+          feedback.classList.remove('is-visible');
+        }, 1600);
+      } catch {
+        copy.classList.remove('is-copied');
+        copy.classList.add('is-failed');
+        copy.setAttribute('title', '复制失败');
+        copy.setAttribute('aria-label', '复制失败');
+        feedback.textContent = '复制失败';
+        feedback.classList.add('is-visible');
+        window.setTimeout(() => {
+          copy.setAttribute('title', '复制代码');
+          copy.setAttribute('aria-label', '复制代码');
+          copy.classList.remove('is-failed');
+          feedback.classList.remove('is-visible');
+        }, 1600);
+      }
+    };
+
+    wrapper.appendChild(copy);
+    wrapper.appendChild(feedback);
+    code.innerHTML = highlightCode(raw, language);
+  });
 }
 
 function scrollt(id) {
@@ -985,6 +1260,7 @@ function bindAll() {
   }
   lazyLoadImages();
   enhanceArticleContent();
+  enhanceCodeBlocks();
 }
 
 window.TypechoComment = {

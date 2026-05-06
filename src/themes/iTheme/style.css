@@ -13,10 +13,33 @@ a small{font-size:11px;color:#777;display:block}
 a:hover small{color:#777}
 #wrap{width:860px;margin:0 auto}
 blockquote{border-left:1px solid #e5e5e5;margin:0;padding:0 0 0 20px;font-style:italic}
-code{background:#333;border-radius:2px;color:#fff;font-size:.8rem;margin:0 2px;padding:2px 5px}
+code{background:#f8f3e8;border-radius:2px;color:#5f4b1a;font-size:.8rem;margin:0 2px;padding:2px 5px}
 code,pre{font-family:Monaco,Bitstream Vera Sans Mono,Lucida Console,Terminal,Consolas,Liberation Mono,DejaVu Sans Mono,Courier New,monospace}
-pre{max-height:300px;padding:.75em;font-size:12px;line-height:20px;background:#333;overflow:auto;border-radius:5px}
-pre>code{margin:0;padding:0;color:#fff;background:#333}
+pre{max-height:300px;padding:.75em;font-size:12px;line-height:20px;background:#fbf7ee;overflow:auto;border-radius:10px;scrollbar-width:thin;scrollbar-color:rgba(95,75,26,.12) transparent;border:1px solid rgba(95,75,26,.06)}
+pre>code{margin:0;padding:0;color:#3f3420;background:#fbf7ee}
+.code-block-wrap{position:relative;margin:0 0 20px}
+pre.code-block{position:relative;padding-top:.75em;padding-right:.75em}
+pre.code-block>code{display:block;white-space:pre}
+.code-copy{position:absolute;top:10px;right:10px;z-index:3;display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:0;padding:0;background:transparent;color:rgba(95,75,26,.42);cursor:pointer;transition:color .2s ease,opacity .2s ease,transform .2s ease}
+.code-copy:hover{color:#5f4b1a;transform:translateY(-1px)}
+.code-copy svg{width:20px;height:20px;fill:currentColor}
+.code-copy.is-copied{color:#7dd3fc}
+.code-copy.is-failed{color:#f87171}
+.code-copy-feedback{position:absolute;top:8px;right:36px;z-index:3;padding:2px 8px;border-radius:999px;background:rgba(95,75,26,.1);color:#5f4b1a;font-size:11px;line-height:1.6;opacity:0;transform:translateY(-2px);pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.code-copy-feedback.is-visible{opacity:1;transform:translateY(0)}
+.code-keyword{color:#9d174d}
+.code-string{color:#b45309}
+.code-number{color:#c2410c}
+.code-comment{color:#7c6f57}
+.code-tag{color:#155e75}
+.code-attr{color:#7c3aed}
+.code-property{color:#166534}
+.code-builtin{color:#9a3412}
+.code-punctuation{color:#3f3420}
+pre::-webkit-scrollbar{height:6px;width:6px}
+pre::-webkit-scrollbar-track{background:transparent}
+pre::-webkit-scrollbar-thumb{background:rgba(95,75,26,.12);border-radius:999px}
+pre::-webkit-scrollbar-thumb:hover{background:rgba(95,75,26,.2)}
 table{width:100%;border-collapse:collapse}
 td,th{text-align:left;padding:5px 10px;border-bottom:1px solid #e5e5e5}
 #box td{border-bottom:0;padding:.5em;position:relative;overflow:hidden}
@@ -189,7 +212,12 @@ html.theme-dark a:hover,html.theme-dark a:focus{background-color:#1f1f1f;color:#
 html.theme-dark .menu a:hover,html.theme-dark .menu a:focus,html.theme-dark .menu a.current{background-color:transparent}
 html.theme-dark a small,html.theme-dark a:hover small,html.theme-dark .menu a strong{color:#9d9d9d}
 html.theme-dark blockquote{border-left-color:#2d2d2d}
-html.theme-dark code,html.theme-dark pre{background:#1c1c1c;color:#efefef}
+html.theme-dark code{background:#191919;color:#ececec}
+html.theme-dark pre{background:#191919;color:#ececec;scrollbar-color:rgba(255,255,255,.1) transparent;border-color:rgba(255,255,255,.04)}
+html.theme-dark pre>code{background:#191919;color:#ececec}
+html.theme-dark .code-copy{color:rgba(255,255,255,.48)}
+html.theme-dark .code-copy:hover{color:#fff}
+html.theme-dark .code-copy-feedback{background:rgba(255,255,255,.08);color:#f4f4f4}
 html.theme-dark td,html.theme-dark th,html.theme-dark hr,html.theme-dark #bar>h1,html.theme-dark .ins-section .ins-section-header{border-color:#2a2a2a;background-color:transparent}
 html.theme-dark #search-input,html.theme-dark #submit,html.theme-dark #textarea,html.theme-dark .anu,html.theme-dark .smile,html.theme-dark .submit,html.theme-dark .text{background:#171717;border-color:#343434;color:#e6e6e6}
 html.theme-dark #search-input:focus,html.theme-dark #textarea:focus,html.theme-dark .text:focus{border-color:#7a7a7a}
