@@ -8,7 +8,7 @@ type Props = ThemeArchiveProps;
 const props = Astro.props;
 const latestTime = props.posts.length > 0 ? props.posts[props.posts.length - 1].created : Math.floor(Date.now() / 1000);
 ---
-<Layout {...props} pageTitle={`${props.archiveTitle} - ${props.options.title}`} searchPosts={props.posts}>
+<Layout {...props} pageTitle={props.archiveTitle} searchPosts={props.posts}>
   <p class="center">{props.archiveTitle}</p>
   <table>
     <tbody id="box" class="box">

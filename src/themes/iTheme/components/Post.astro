@@ -8,7 +8,7 @@ type Props = ThemePostProps;
 const props = Astro.props;
 const isCommentFragment = props.renderMode === 'comment';
 ---
-<Layout {...props} pageTitle={`${props.post.title} - ${props.options.title}`}>
+<Layout {...props} pageTitle={props.post.title}>
   {isCommentFragment ? (
     <Comments
       {...props}

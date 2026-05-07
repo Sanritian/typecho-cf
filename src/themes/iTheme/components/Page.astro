@@ -8,7 +8,7 @@ const props = Astro.props;
 const isCommentFragment = props.renderMode === 'comment';
 const isLinksPage = props.page.template === 'links' || props.page.slug === 'links';
 ---
-<Layout {...props} pageTitle={`${props.page.title} - ${props.options.title}`}>
+<Layout {...props} pageTitle={props.page.title}>
   {isCommentFragment ? (
     <Comments
       {...props}

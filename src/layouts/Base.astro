@@ -4,9 +4,11 @@ import type { computeUrls } from '@/lib/options';
 import type { UserRow } from '@/lib/context';
 import { getThemeStylesheets } from '@/lib/theme';
 import { getClientSnippets } from '@/lib/plugin';
+import { buildDocumentTitle } from '@/lib/page-title';
 
 interface Props {
   title?: string;
+  fullTitle?: string;
   description?: string;
   keywords?: string;
   options: SiteOptions;
@@ -18,6 +20,7 @@ interface Props {
 
 const {
   title,
+  fullTitle,
   description,
   keywords,
   options,
@@ -27,7 +30,7 @@ const {
   bodyClass = '',
 } = Astro.props;
 
-const pageTitle = title ? `${title} - ${options.title}` : options.title;
+const pageTitle = buildDocumentTitle({ title, fullTitle, siteTitle: options.title });
 const themeStylesheets = getThemeStylesheets(options.theme || 'typecho-theme-minimal');
 
 // Collect client-side snippets from all activated plugins

@@ -1,6 +1,7 @@
 ---
 import Base from '@/layouts/Base.astro';
 import type { ThemeBaseProps } from '@/lib/theme-props';
+import { resolveThemeLayoutTitle } from '@/lib/page-title';
 import { getHeaderTitle, getHeaderSubtitle, getNavHtml, getSearchDatasetJson } from './shared';
 
 interface Props extends ThemeBaseProps {
@@ -9,7 +10,11 @@ interface Props extends ThemeBaseProps {
 }
 
 const props = Astro.props;
-const pageTitle = props.pageTitle || props.options.title;
+const { title: pageTitle, fullTitle } = resolveThemeLayoutTitle(
+  props.pageTitle,
+  props.options.title || 'iTheme',
+  props.options.description,
+);
 const isAjaxCommentMode = props.renderMode === 'comment';
 const searchDataset = getSearchDatasetJson({ ...props, posts: props.searchPosts || [] });
 ---
@@ -18,6 +23,7 @@ const searchDataset = getSearchDatasetJson({ ...props, posts: props.searchPosts 
 ) : (
   <Base
     title={pageTitle}
+    fullTitle={fullTitle}
     options={props.options}
     urls={props.urls}
     user={props.user}
