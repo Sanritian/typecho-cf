@@ -55,10 +55,11 @@ export function getNavHtml(props: ThemeBaseProps): string {
   const fallback = `<ul class="menu"><li><a href="${props.urls.siteUrl || '/'}">主页<strong>HOME</strong></a></li><li><a id="s">搜索<strong>SEARCH</strong></a></li></ul>`;
   const navHtml = getThemeText(props.themeConfig, 'dh', fallback);
   const toggleItem = `<li><a id="theme-toggle" class="theme-toggle-link" href="javascript:void(0)">夜间<strong>NIGHT</strong></a></li>`;
+  const directoryItem = getDirectoryNavItemHtml(props);
   if (navHtml.includes('</ul>')) {
-    return navHtml.replace('</ul>', `${toggleItem}</ul>`);
+    return navHtml.replace('</ul>', `${toggleItem}${directoryItem}</ul>`);
   }
-  return `${navHtml}${toggleItem}`;
+  return `${navHtml}${toggleItem}${directoryItem}`;
 }
 
 export interface ThemeCategoryNode {
@@ -150,15 +151,26 @@ function renderDirectoryEntry(
   return `<li>${normalizeDirectoryLabelHtml(entry.labelHtml, labelHref)}${renderCategoryChildrenFlat(categories, entry.id)}</li>`;
 }
 
-export function getDirectoryHtml(props: ThemeBaseProps): string {
+function buildDirectoryEntriesHtml(props: ThemeBaseProps): string {
   const config = parseDirectoryConfig(props.themeConfig.fl);
   if (config.length === 0) return '';
 
   // 对齐原主题 getTree()：直接在扁平分类表上按 parent 递归，
   // 并按 mid 升序遍历，避免被当前系统的分类排序字段影响显示顺序。
   const categories = [...props.allCategories].sort((left, right) => left.mid - right.mid);
-  const entriesHtml = config.map((entry) => renderDirectoryEntry(categories, entry)).join('');
-  return `<div><ul><li><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul>${entriesHtml}</ul></li></ul></div>`;
+  return config.map((entry) => renderDirectoryEntry(categories, entry)).join('');
+}
+
+function getDirectoryNavItemHtml(props: ThemeBaseProps): string {
+  const entriesHtml = buildDirectoryEntriesHtml(props);
+  if (!entriesHtml) return '';
+  return `<li id="nav"><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul>${entriesHtml}</ul></li>`;
+}
+
+export function getDirectoryHtml(props: ThemeBaseProps): string {
+  const itemHtml = getDirectoryNavItemHtml(props);
+  if (!itemHtml) return '';
+  return `<div><ul>${itemHtml}</ul></div>`;
 }
 
 export function getCommentCount(nodes: CommentNode[]): number {

@@ -1,7 +1,7 @@
 ---
 import Base from '@/layouts/Base.astro';
 import type { ThemeBaseProps } from '@/lib/theme-props';
-import { getHeaderTitle, getHeaderSubtitle, getNavHtml, getDirectoryHtml, getSearchDatasetJson } from './shared';
+import { getHeaderTitle, getHeaderSubtitle, getNavHtml, getSearchDatasetJson } from './shared';
 
 interface Props extends ThemeBaseProps {
   pageTitle?: string;
@@ -62,7 +62,6 @@ const searchDataset = getSearchDatasetJson({ ...props, posts: props.searchPosts 
           </a>
         </h1>
         <Fragment set:html={getNavHtml(props)} />
-        <div id="nav" class="menu" set:html={getDirectoryHtml(props)}></div>
       </header>
       <section id="search">
         <form id="search-form" method="post" action="./" role="search">

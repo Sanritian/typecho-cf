@@ -2,7 +2,7 @@
  * iTheme 分类目录渲染测试。
  */
 import { describe, expect, it } from 'vitest';
-import { getDirectoryHtml, parseDirectoryConfig } from '@/themes/iTheme/components/shared';
+import { getDirectoryHtml, getNavHtml, parseDirectoryConfig } from '@/themes/iTheme/components/shared';
 
 describe('parseDirectoryConfig()', () => {
   it('同时兼容中英文逗号和分号', () => {
@@ -25,7 +25,7 @@ describe('getDirectoryHtml()', () => {
       ],
     } as any);
 
-    expect(html).toBe('<div><ul><li><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul><li><a href="/default/" class="item directory-label">默认分类</a><em></em><ul><li><a href="/child-a/" class="item">子分类 A</a><em></em><ul><li><a href="/child-b/" class="item">子分类 B</a></li></ul></li><li><a href="/child-c/" class="item">子分类 C</a></li></ul></li></ul></li></ul></div>');
+    expect(html).toBe('<div><ul><li id="nav"><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul><li><a href="/default/" class="item directory-label">默认分类</a><em></em><ul><li><a href="/child-a/" class="item">子分类 A</a><em></em><ul><li><a href="/child-b/" class="item">子分类 B</a></li></ul></li><li><a href="/child-c/" class="item">子分类 C</a></li></ul></li></ul></li></ul></div>');
   });
 
   it('保留手写 HTML 目录标题不额外包裹', () => {
@@ -36,7 +36,7 @@ describe('getDirectoryHtml()', () => {
       ],
     } as any);
 
-    expect(html).toBe('<div><ul><li><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul><li><a href="/tutorial/">教程</a></li></ul></li></ul></div>');
+    expect(html).toBe('<div><ul><li id="nav"><a href="javascript:void(0)" class="item directory-label">分类</a><em></em><ul><li><a href="/tutorial/">教程</a></li></ul></li></ul></div>');
   });
 
   it('纯文本目录标题会自动链接到对应分类页', () => {
@@ -64,5 +64,22 @@ describe('getDirectoryHtml()', () => {
     expect(html).toContain('<a href="/tutorial/" class="item directory-label">教程</a>');
     expect(html).toContain('<a href="/notes/" class="item directory-label">笔记</a>');
     expect(html).toContain('<a href="/project/" class="item directory-label">项目</a>');
+  });
+});
+
+describe('getNavHtml()', () => {
+  it('将分类目录追加到夜间切换项后面', () => {
+    const html = getNavHtml({
+      urls: { siteUrl: '/' },
+      themeConfig: {
+        dh: '<ul class="menu"><li><a href="/">主页<strong>HOME</strong></a></li></ul>',
+        fl: '1，默认分类',
+      },
+      allCategories: [
+        { mid: 1, parent: 0, name: '默认分类', slug: 'default', count: 0, permalink: '/default/' },
+      ],
+    } as any);
+
+    expect(html).toContain('<li><a id="theme-toggle" class="theme-toggle-link" href="javascript:void(0)">夜间<strong>NIGHT</strong></a></li><li id="nav"><a href="javascript:void(0)" class="item directory-label">分类</a>');
   });
 });
