@@ -9,6 +9,7 @@
 import Admin from '@/layouts/Admin.astro';
 import { createContext, requireAuth } from '@/lib/context';
 import { hasPermission, requireAdminCSRF } from '@/lib/auth';
+import { sanitizeAdminConfigDescription } from '@/lib/admin-config-description';
 import {
   getPlugin,
   pluginHasConfig,
@@ -174,7 +175,7 @@ const pageTitle = `设置插件 ${manifest.name || pluginId}`;
               )}
 
               {field.description && (
-                <p class="description" set:html={field.description}></p>
+                <p class="description" set:html={sanitizeAdminConfigDescription(field.description)}></p>
               )}
             </li>
           );

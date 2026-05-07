@@ -55,11 +55,13 @@ describe('iTheme files', () => {
       'utf-8',
     );
 
-    expect(postSource).toContain("url: '/api/admin/upload'");
-    expect(postSource).toContain("fd.append('file', file)");
-    expect(pageSource).toContain("url: '/api/admin/upload'");
-    expect(pageSource).toContain("fd.append('file', file)");
-    expect(postSource).not.toContain('convertImageToAvif');
-    expect(pageSource).not.toContain('convertImageToAvif');
+    expect(postSource).toContain('/js/admin-attachment-upload.js');
+    expect(pageSource).toContain('/js/admin-attachment-upload.js');
+    expect(postSource).toContain('TypechoAdmin.createAttachmentUploader');
+    expect(pageSource).toContain('TypechoAdmin.createAttachmentUploader');
+    expect(postSource).toContain("uploadPanelSelector: '#upload-panel'");
+    expect(pageSource).toContain("uploadPanelSelector: '#upload-panel'");
+    expect(postSource).not.toContain("url: '/api/admin/upload'");
+    expect(pageSource).not.toContain("url: '/api/admin/upload'");
   });
 });
