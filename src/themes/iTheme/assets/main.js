@@ -1,5 +1,6 @@
 import { findActiveTocIndex, parseCommentCountText } from './tool-state.js';
 import { createPageCache, parsePageCache, updatePageCacheCommentCount } from './page-cache.js';
+import { resolvePrefetchUrl, shouldSkipPrefetchByConnection } from './page-prefetch.js';
 
 const state = {
   pageHtml: '',
@@ -17,6 +18,7 @@ const state = {
   activeNavHref: '',
   cache: new Map(),
   pending: null,
+  prefetchTasks: new Map(),
   tocEntries: [],
   tocMarkers: [],
   tocActiveIndex: -1,
@@ -496,6 +498,19 @@ function loadFromCache(url) {
   }
 }
 
+function getConnectionInfo() {
+  return navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+}
+
+function storePageCache(url, html) {
+  try {
+    sessionStorage.setItem(
+      normalizeUrl(url),
+      createPageCache(extractMainHtml(html), extractTitle(html)),
+    );
+  } catch {}
+}
+
 async function fetchText(url, options = {}) {
   if (state.pending?.abort) {
     state.pending.abort.abort();
@@ -517,6 +532,20 @@ async function fetchText(url, options = {}) {
     throw new Error(`请求失败: ${response.status}`);
   }
 
+  return response.text();
+}
+
+async function fetchPrefetchText(url) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-PJAX': 'true',
+      'X-Prefetch': 'true',
+    },
+  });
+
+  if (!response.ok) return null;
   return response.text();
 }
 
@@ -548,6 +577,27 @@ function updateHistory(url, title, html, replace = false) {
   } else {
     history.pushState(data, title, url);
   }
+}
+
+async function prefetchPage(url) {
+  if (loadFromCache(url) || state.prefetchTasks.has(url)) {
+    return state.prefetchTasks.get(url) || null;
+  }
+
+  const task = (async () => {
+    try {
+      const html = await fetchPrefetchText(url);
+      if (!html) return;
+      storePageCache(url, html);
+    } catch {
+      // 预取是机会型优化，失败后回退到正常点击加载即可。
+    } finally {
+      state.prefetchTasks.delete(url);
+    }
+  })();
+
+  state.prefetchTasks.set(url, task);
+  return task;
 }
 
 function getPreferredTheme() {
@@ -600,6 +650,39 @@ function updateNavActiveState() {
 
     const href = link.getAttribute('href') || '';
     link.classList.toggle('current', current !== '' && normalizeHrefForCompare(href) === current);
+  });
+}
+
+function isPrefetchCandidateLink(link) {
+  if (!(link instanceof HTMLAnchorElement)) return false;
+  if (!link.matches('#box h2 a, .ins-search-item.ins-search-post, .ins-search-item.ins-search-page')) return false;
+  if (link.target === '_blank' || link.hasAttribute('download') || link.dataset.noprefetch === '1') return false;
+  if (shouldSkipPrefetchByConnection(getConnectionInfo())) return false;
+
+  const resolved = resolvePrefetchUrl(link.getAttribute('href') || '', window.location.origin);
+  if (!resolved) return false;
+
+  const current = resolvePrefetchUrl(window.location.href, window.location.origin);
+  if (resolved === current) return false;
+  if (loadFromCache(resolved)) return false;
+  return true;
+}
+
+function bindPrefetchLinks(root = document) {
+  qsa('#box h2 a, .ins-search-item.ins-search-post, .ins-search-item.ins-search-page', root).forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement) || link.dataset.prefetchBound === '1') return;
+
+    const trigger = () => {
+      if (!isPrefetchCandidateLink(link)) return;
+      const resolved = resolvePrefetchUrl(link.getAttribute('href') || '', window.location.origin);
+      if (!resolved) return;
+      void prefetchPage(resolved);
+    };
+
+    link.dataset.prefetchBound = '1';
+    link.addEventListener('mouseenter', trigger, { passive: true });
+    link.addEventListener('focus', trigger);
+    link.addEventListener('touchstart', trigger, { passive: true });
   });
 }
 
@@ -721,6 +804,7 @@ function buildSearchResults(data, keywords) {
   qsa('a', resultHost).forEach((link) => {
     link.addEventListener('click', handleNavClick);
   });
+  bindPrefetchLinks(resultHost);
   state.searchIndex = -1;
 }
 
@@ -1124,6 +1208,8 @@ async function navigate(url, { replace = false } = {}) {
     return;
   }
 
+  const cacheUrl = resolvePrefetchUrl(target.href, window.location.origin) || target.href;
+
   const pathname = target.pathname;
   if (pathname.endsWith('.php')) {
     window.location.href = target.href;
@@ -1132,7 +1218,13 @@ async function navigate(url, { replace = false } = {}) {
 
   try {
     rememberPage();
-    const cached = loadFromCache(target.href);
+    let cached = loadFromCache(cacheUrl);
+    if (!cached && state.prefetchTasks.has(cacheUrl)) {
+      try {
+        await state.prefetchTasks.get(cacheUrl);
+      } catch {}
+      cached = loadFromCache(cacheUrl);
+    }
     if (cached) {
       await renderPage(
         target.href,
@@ -1143,12 +1235,7 @@ async function navigate(url, { replace = false } = {}) {
     }
 
     const html = await fetchText(target.href);
-    try {
-      sessionStorage.setItem(
-        normalizeUrl(target.href),
-        createPageCache(extractMainHtml(html), extractTitle(html)),
-      );
-    } catch {}
+    storePageCache(cacheUrl, html);
     await renderPage(target.href, html, { replaceHistory: replace });
   } catch (error) {
     showTip(error instanceof Error ? error.message : '请求失败', false);
@@ -1189,6 +1276,8 @@ function bindLinks() {
     link.removeEventListener('click', handleNavClick);
     link.addEventListener('click', handleNavClick);
   });
+
+  bindPrefetchLinks();
 }
 
 function bindSearch() {
