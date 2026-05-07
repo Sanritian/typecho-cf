@@ -64,6 +64,79 @@ function buildRewriteUrl(requestUrl: string, pathname: string): URL {
   return rewrittenUrl;
 }
 
+function parseSiteUrl(siteUrl: string | undefined | null): URL | null {
+  if (!siteUrl) return null;
+  try {
+    return new URL(siteUrl);
+  } catch {
+    return null;
+  }
+}
+
+function hasAuthCookie(cookieHeader: string | null): boolean {
+  if (!cookieHeader) return false;
+  return /(?:^|;\s*)__typecho_uid=/.test(cookieHeader) ||
+    /(?:^|;\s*)__typecho_authCode=/.test(cookieHeader);
+}
+
+function isAjaxLikeRequest(request: Request, url: URL): boolean {
+  const requestedWith = (request.headers.get('x-requested-with') || '').toLowerCase();
+  return requestedWith === 'xmlhttprequest' ||
+    request.headers.has('x-pjax') ||
+    url.searchParams.has('ajax') ||
+    url.searchParams.has('c');
+}
+
+function isDocumentNavigationRequest(request: Request): boolean {
+  const secFetchMode = (request.headers.get('sec-fetch-mode') || '').toLowerCase();
+  const secFetchDest = (request.headers.get('sec-fetch-dest') || '').toLowerCase();
+  const accept = (request.headers.get('accept') || '').toLowerCase();
+
+  // 页面缓存只服务真正的 HTML 文档导航，避免 PJAX/XHR/片段请求污染同 URL 的缓存。
+  if (secFetchMode && secFetchMode !== 'navigate') return false;
+  if (secFetchDest && secFetchDest !== 'document') return false;
+  if (accept && !accept.includes('text/html')) return false;
+
+  return true;
+}
+
+function canUseEdgeCache(
+  request: Request,
+  url: URL,
+  path: string,
+  siteUrl: string,
+  locals: App.Locals,
+): boolean {
+  if (request.method !== 'GET') return false;
+  if (hasAuthCookie(request.headers.get('cookie'))) return false;
+  if (path.startsWith('/admin') || path.startsWith('/api/') || path.startsWith('/usr/')) return false;
+  if (path.startsWith('/feed')) return false;
+  if (isAjaxLikeRequest(request, url)) return false;
+  if (!isDocumentNavigationRequest(request)) return false;
+  if (url.search) return false;
+  // /page/N/ rewrite 后实际请求 URL 会变成基础路径，若继续缓存会把分页内容串到第一页。
+  if ((locals as any)._page || (locals as any)._commentPage) return false;
+
+  const siteOrigin = parseSiteUrl(siteUrl);
+  // 只缓存后台配置的主域名入口，避免自定义域与 workers.dev 双入口互相污染。
+  if (siteOrigin && url.host !== siteOrigin.host) return false;
+
+  return true;
+}
+
+function canStoreEdgeResponse(response: Response): boolean {
+  if (response.status !== 200) return false;
+  if (response.headers.has('location')) return false;
+  if (response.headers.has('set-cookie')) return false;
+
+  const cacheControl = (response.headers.get('cache-control') || '').toLowerCase();
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  if (cacheControl.includes('no-store') || cacheControl.includes('private')) return false;
+  if (contentType && !contentType.includes('text/html')) return false;
+
+  return true;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const url = new URL(context.request.url);
   const path = url.pathname;
@@ -135,15 +208,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   // ── Edge Cache Layer ──────────────────────────────────────────────────────
-  const isGetRequest = context.request.method === 'GET';
-  const hasAuth = context.request.headers.get('cookie')?.includes('__typecho_uid');
   const isCacheable =
     options.cacheEnabled &&
-    isGetRequest &&
-    !hasAuth &&
-    !path.startsWith('/admin') &&
-    !path.startsWith('/api/') &&
-    !path.startsWith('/usr/');
+    canUseEdgeCache(context.request, url, path, options.siteUrl || '', context.locals);
 
   // Reuse a single Request for both cache.match and cache.put
   const cacheKey = isCacheable ? new Request(context.request.url, { method: 'GET' }) : null;
@@ -296,7 +363,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
 
   // ── Write response to edge cache ──────────────────────────────────────────
-  if (cacheKey && response.status === 200) {
+  if (cacheKey && canStoreEdgeResponse(response)) {
     const headers = new Headers(response.headers);
     if (!headers.has('Cache-Control')) {
       headers.set('Cache-Control', 'public, s-maxage=300');

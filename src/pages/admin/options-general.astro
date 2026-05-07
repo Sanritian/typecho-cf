@@ -68,7 +68,7 @@ const { options, urls, user, csrfToken } = ctx;
             <input type="checkbox" name="cacheEnabled" value="1" checked={options.cacheEnabled !== 0} />
             启用页面缓存
           </label>
-          <p class="description">启用后，未登录用户访问的页面将在边缘节点缓存 5 分钟，可大幅减少数据库查询。管理员操作（发布、编辑、评论等）会自动清除相关缓存</p>
+          <p class="description">仅缓存主域名下未登录用户的普通 HTML 页面请求，缓存 5 分钟。后台、API、上传、Feed、搜索参数、密码访问、PJAX/XHR、评论片段与分页片段不会进入页面缓存，管理员操作（发布、编辑、评论等）会自动清除相关缓存</p>
         </li>
       </ul>
       <ul class="typecho-option typecho-option-submit">
