@@ -309,6 +309,7 @@ if (isEdit && post) {
 
       var converter = new HyperDown(),
           editor = new Markdown.Editor(converter, '', options);
+      var adminCsrfToken = $('input[name="_"]').first().val() || '';
 
       converter.enableHtml(true);
       converter.enableLine(true);
@@ -528,61 +529,6 @@ if (isEdit && post) {
             fileInput = $('#file-input'),
             fileList = $('#file-list');
 
-        function supportsAvifEncode() {
-          var canvas = document.createElement('canvas');
-          if (!canvas.toDataURL) return false;
-          try {
-            return canvas.toDataURL('image/avif').indexOf('data:image/avif') === 0;
-          } catch (e) {
-            return false;
-          }
-        }
-
-        function loadImageFromFile(file) {
-          return new Promise(function (resolve, reject) {
-            var url = URL.createObjectURL(file);
-            var img = new Image();
-            img.onload = function () {
-              URL.revokeObjectURL(url);
-              resolve(img);
-            };
-            img.onerror = function () {
-              URL.revokeObjectURL(url);
-              reject(new Error('图片读取失败'));
-            };
-            img.src = url;
-          });
-        }
-
-        async function convertImageToAvif(file) {
-          if (!/^image\/(jpeg|png|webp|bmp)$/i.test(file.type)) return file;
-          if (!supportsAvifEncode()) return file;
-
-          try {
-            var img = await loadImageFromFile(file);
-            var canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width;
-            canvas.height = img.naturalHeight || img.height;
-            var ctx = canvas.getContext('2d');
-            if (!ctx) return file;
-            ctx.drawImage(img, 0, 0);
-
-            var blob = await new Promise(function (resolve) {
-              canvas.toBlob(resolve, 'image/avif', 0.82);
-            });
-
-            if (!blob || blob.type !== 'image/avif') return file;
-
-            var base = file.name.replace(/\.[^.]+$/, '');
-            return new File([blob], base + '.avif', {
-              type: 'image/avif',
-              lastModified: Date.now()
-            });
-          } catch (e) {
-            return file;
-          }
-        }
-
         function updateAttachmentNumber() {
           var btn = $('#tab-files-btn'),
               balloon = $('.balloon', btn),
@@ -623,8 +569,7 @@ if (isEdit && post) {
         }
 
         async function doUpload(files) {
-          var converted = await Promise.all(Array.from(files).map(convertImageToAvif));
-          for (var i = 0; i < converted.length; i++) {
+          for (var i = 0; i < files.length; i++) {
             (function (file, idx) {
               var uid = Date.now().toString(36) + idx;
               fileUploadStart(file.name, uid);
@@ -632,6 +577,7 @@ if (isEdit && post) {
               var fd = new FormData();
               fd.append('file', file);
               fd.append('cid', String(cid));
+              fd.append('_', String(adminCsrfToken));
 
               $.ajax({
                 url: '/api/admin/upload',
@@ -655,7 +601,7 @@ if (isEdit && post) {
                   fileUploadError(uid, file.name + ' 上传失败');
                 }
               });
-            })(converted[i], i);
+            })(files[i], i);
           }
         }
 
@@ -708,7 +654,7 @@ if (isEdit && post) {
             if (!confirm('确认要删除文件 ' + name + ' 吗?')) return;
             var attachCid = $(el).data('cid');
             $.ajax({
-              url: '/api/admin/upload?cid=' + attachCid,
+              url: '/api/admin/upload?cid=' + attachCid + '&_=' + encodeURIComponent(String(adminCsrfToken)),
               type: 'DELETE',
               dataType: 'json',
               success: function () {

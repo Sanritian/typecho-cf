@@ -53,12 +53,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     const bucket = env.BUCKET;
-    const result = await uploadToR2(bucket, file, options.siteUrl, options.attachmentTypes);
+    const images = (env as any).IMAGES;
+    const result = await uploadToR2(bucket, file, options.siteUrl, options.attachmentTypes, images);
 
     // Create attachment content record
     const now = Math.floor(Date.now() / 1000);
     const inserted = await db.insert(schema.contents).values({
-      title: file.name,
+      title: result.name,
       slug: `attachment-${Date.now().toString(36)}`,
       created: now,
       modified: now,
@@ -82,10 +83,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       result.url,
       {
         cid,
-        title: file.name,
+        title: result.name,
         url: result.url,
         bytes: formatBytes(result.size),
-        isImage: isImageType(file.type),
+        isImage: isImageType(result.type),
       },
     ]), { status: 200, headers: jsonHeaders });
   } catch (error) {

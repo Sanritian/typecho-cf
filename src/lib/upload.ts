@@ -12,6 +12,20 @@ export interface UploadResult {
 }
 
 /**
+ * Cloudflare Images binding (Workers API) used to transform user uploads
+ * before they are persisted to R2.
+ */
+export interface CloudflareImagesBindingLike {
+  input(stream: ReadableStream<Uint8Array> | Blob | ArrayBuffer): {
+    output(options: { format: 'image/avif'; quality?: number; anim?: boolean }): Promise<{
+      response(): Response;
+    }> | {
+      response(): Response;
+    };
+  };
+}
+
+/**
  * Mapping from file extension to MIME type.
  * Used to derive the actual MIME type from the filename extension
  * instead of trusting the client-provided `file.type`, which can be spoofed.
@@ -66,6 +80,13 @@ const ALLOWED_TYPES: Record<string, string[]> = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ],
 };
+
+const AVIF_SOURCE_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/bmp',
+]);
 
 /**
  * Derive the MIME type from a filename's extension.
@@ -127,12 +148,15 @@ export async function uploadToR2(
   bucket: R2Bucket,
   file: File,
   siteUrl: string,
-  attachmentTypes: string
+  attachmentTypes: string,
+  images?: CloudflareImagesBindingLike | null
 ): Promise<UploadResult> {
+  const uploadFile = await convertUploadFileToAvif(file, images);
+
   // Derive MIME type from extension — never trust client-provided file.type
-  const mimeType = getMimeTypeFromExtension(file.name);
+  const mimeType = getMimeTypeFromExtension(uploadFile.name);
   if (!mimeType) {
-    throw new Error(`无法识别的文件扩展名: ${file.name}`);
+    throw new Error(`无法识别的文件扩展名: ${uploadFile.name}`);
   }
 
   if (!isAllowedType(mimeType, attachmentTypes)) {
@@ -140,12 +164,12 @@ export async function uploadToR2(
   }
 
   const maxSize = 10 * 1024 * 1024; // 10MB
-  if (file.size > maxSize) {
+  if (uploadFile.size > maxSize) {
     throw new Error('文件大小超出限制 (最大 10MB)');
   }
 
-  const path = generateUploadPath(file.name);
-  const arrayBuffer = await file.arrayBuffer();
+  const path = generateUploadPath(uploadFile.name);
+  const arrayBuffer = await uploadFile.arrayBuffer();
 
   // SVG XSS protection: force download instead of inline rendering.
   // SVGs can contain <script>, onload handlers, and other XSS vectors;
@@ -160,9 +184,9 @@ export async function uploadToR2(
   });
 
   return {
-    name: file.name,
+    name: uploadFile.name,
     path,
-    size: file.size,
+    size: uploadFile.size,
     type: mimeType,
     url: `${siteUrl.replace(/\/$/, '')}/${path}`,
   };
@@ -180,6 +204,42 @@ export async function deleteFromR2(bucket: R2Bucket, path: string): Promise<void
  */
 export async function getFromR2(bucket: R2Bucket, path: string): Promise<R2ObjectBody | null> {
   return await bucket.get(path);
+}
+
+/**
+ * Convert a user upload to AVIF on the server when the Cloudflare Images
+ * binding is available. This is the root-cause fix for browsers that can
+ * display AVIF but fail to encode it reliably.
+ */
+export async function convertUploadFileToAvif(
+  file: File,
+  images?: CloudflareImagesBindingLike | null,
+): Promise<File> {
+  if (!images) return file;
+
+  const mimeType = getMimeTypeFromExtension(file.name) || file.type || '';
+  if (!AVIF_SOURCE_TYPES.has(mimeType)) return file;
+  if (mimeType === 'image/avif') return file;
+
+  try {
+    const transformed = await images.input(file.stream()).output({
+      format: 'image/avif',
+      quality: 82,
+    });
+    const response = transformed.response();
+    if (!response.ok) return file;
+
+    const blob = await response.blob();
+    if (!blob.size || blob.type !== 'image/avif') return file;
+
+    const base = file.name.replace(/\.[^.]+$/, '');
+    return new File([blob], `${base}.avif`, {
+      type: 'image/avif',
+      lastModified: file.lastModified || Date.now(),
+    });
+  } catch {
+    return file;
+  }
 }
 
 /**

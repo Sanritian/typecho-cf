@@ -6,9 +6,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  convertUploadFileToAvif,
   getMimeTypeFromExtension,
   isAllowedType,
   generateUploadPath,
+  uploadToR2,
 } from '@/lib/upload';
 
 // ---------------------------------------------------------------------------
@@ -183,5 +185,82 @@ describe('generateUploadPath()', () => {
     const date = new Date('2026-01-01');
     const path = generateUploadPath('PHOTO.JPG', date);
     expect(path).toMatch(/\.jpg$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Server-side AVIF conversion
+// ---------------------------------------------------------------------------
+describe('convertUploadFileToAvif()', () => {
+  it('returns the original file when Images binding is unavailable', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'photo.jpg', { type: 'image/jpeg' });
+
+    const converted = await convertUploadFileToAvif(file, null);
+
+    expect(converted).toBe(file);
+    expect(converted.name).toBe('photo.jpg');
+  });
+
+  it('converts supported raster images to avif when Images binding is available', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' });
+    const images = {
+      input() {
+        return {
+          output() {
+            return {
+              response() {
+                return new Response(new Uint8Array([8, 6, 4, 2]), {
+                  headers: { 'Content-Type': 'image/avif' },
+                });
+              },
+            };
+          },
+        };
+      },
+    };
+
+    const converted = await convertUploadFileToAvif(file, images as any);
+
+    expect(converted).not.toBe(file);
+    expect(converted.name).toBe('photo.avif');
+    expect(converted.type).toBe('image/avif');
+    expect(converted.size).toBe(4);
+  });
+});
+
+describe('uploadToR2()', () => {
+  it('stores server-converted avif files in R2', async () => {
+    const puts: Array<{ path: string; metadata: Record<string, unknown> | undefined }> = [];
+    const bucket = {
+      async put(path: string, _body: ArrayBuffer, options?: { httpMetadata?: Record<string, unknown> }) {
+        puts.push({ path, metadata: options?.httpMetadata });
+      },
+    };
+    const images = {
+      input() {
+        return {
+          output() {
+            return {
+              response() {
+                return new Response(new Uint8Array([1, 1, 2, 3]), {
+                  headers: { 'Content-Type': 'image/avif' },
+                });
+              },
+            };
+          },
+        };
+      },
+    };
+    const file = new File([new Uint8Array([9, 9, 9])], 'cover.jpg', { type: 'image/jpeg' });
+
+    const result = await uploadToR2(bucket as any, file, 'https://example.com', '@image@', images as any);
+
+    expect(result.name).toBe('cover.avif');
+    expect(result.type).toBe('image/avif');
+    expect(result.path).toMatch(/\.avif$/);
+    expect(result.url).toMatch(/\/usr\/uploads\/.+\.avif$/);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.path).toMatch(/\.avif$/);
+    expect(puts[0]?.metadata?.contentType).toBe('image/avif');
   });
 });

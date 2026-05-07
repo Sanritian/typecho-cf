@@ -55,9 +55,11 @@ describe('iTheme files', () => {
       'utf-8',
     );
 
-    expect(postSource).toContain('convertImageToAvif');
-    expect(postSource).toContain("image/avif");
-    expect(pageSource).toContain('convertImageToAvif');
-    expect(pageSource).toContain("image/avif");
+    expect(postSource).toContain("url: '/api/admin/upload'");
+    expect(postSource).toContain("fd.append('file', file)");
+    expect(pageSource).toContain("url: '/api/admin/upload'");
+    expect(pageSource).toContain("fd.append('file', file)");
+    expect(postSource).not.toContain('convertImageToAvif');
+    expect(pageSource).not.toContain('convertImageToAvif');
   });
 });
