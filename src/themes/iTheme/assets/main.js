@@ -1,4 +1,5 @@
 import { findActiveTocIndex, parseCommentCountText } from './tool-state.js';
+import { createPageCache, parsePageCache, updatePageCacheCommentCount } from './page-cache.js';
 
 const state = {
   pageHtml: '',
@@ -431,8 +432,10 @@ function updateDetailCacheCommentCount() {
   try {
     const cached = sessionStorage.getItem(cacheKey);
     if (!cached) return;
-    const next = cached.replace(/(<span id="pls">)\d+(<\/span>)/, `$1${count}$2`);
-    sessionStorage.setItem(cacheKey, next);
+    const next = updatePageCacheCommentCount(cached, count);
+    if (next && next !== cached) {
+      sessionStorage.setItem(cacheKey, next);
+    }
   } catch {}
 }
 
@@ -475,14 +478,19 @@ function rememberPage() {
   try {
     // 对齐原主题：评论异步加载后的 DOM 不写回页面缓存，避免切文章后仍保持“已加载评论”状态。
     if (!byId('comments')) {
-      sessionStorage.setItem(normalizeUrl(window.location.href), state.pageHtml);
+      sessionStorage.setItem(
+        normalizeUrl(window.location.href),
+        createPageCache(state.pageHtml, state.pageTitle),
+      );
     }
   } catch {}
 }
 
 function loadFromCache(url) {
   try {
-    return sessionStorage.getItem(normalizeUrl(url));
+    const cached = parsePageCache(sessionStorage.getItem(normalizeUrl(url)));
+    if (!cached || cached.legacy || !cached.title) return null;
+    return cached;
   } catch {
     return null;
   }
@@ -1126,13 +1134,20 @@ async function navigate(url, { replace = false } = {}) {
     rememberPage();
     const cached = loadFromCache(target.href);
     if (cached) {
-      await renderPage(target.href, `<section id="main">${cached}</section><title>${document.title}</title>`, { replaceHistory: replace });
+      await renderPage(
+        target.href,
+        `<section id="main">${cached.mainHtml}</section><title>${cached.title}</title>`,
+        { replaceHistory: replace },
+      );
       return;
     }
 
     const html = await fetchText(target.href);
     try {
-      sessionStorage.setItem(normalizeUrl(target.href), extractMainHtml(html));
+      sessionStorage.setItem(
+        normalizeUrl(target.href),
+        createPageCache(extractMainHtml(html), extractTitle(html)),
+      );
     } catch {}
     await renderPage(target.href, html, { replaceHistory: replace });
   } catch (error) {

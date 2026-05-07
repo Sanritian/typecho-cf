@@ -41,8 +41,12 @@ describe('iTheme files', () => {
     expect(source).toContain('scrollTop = true');
     expect(source).toContain('replaceHistory: true, scrollTop: false');
     expect(source).toContain('const restoreScrollY = state.returnScrollY || 0');
+    expect(source).toContain("import { createPageCache, parsePageCache, updatePageCacheCommentCount } from './page-cache.js';");
+    expect(source).toContain('createPageCache(');
+    expect(source).toContain('extractTitle(html)');
     expect(source).toContain('history.replaceState({');
     expect(source).not.toContain('history.pushState({ title: state.returnTitle');
+    expect(source).not.toContain('<section id="main">${cached}</section><title>${document.title}</title>');
   });
 
   it('converts uploaded images to avif in admin editors when supported', () => {
